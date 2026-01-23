@@ -56,10 +56,6 @@ async function cancelJob(jobId) {
 async function deleteImage(imageId, event) {
     event.stopPropagation();
 
-    if (!confirm('Are you sure you want to delete this image?')) {
-        return;
-    }
-
     try {
         const response = await fetch(`/api/images/${imageId}`, {
             method: 'DELETE'
@@ -135,25 +131,145 @@ async function refreshRecentImages() {
     }
 }
 
+// Track current image index and list for navigation
+let currentImageIndex = -1;
+let currentImageList = [];
+
+// Open image modal from element with data attributes
+function openModalFromElement(imgElement) {
+    const imageSrc = imgElement.src;
+    const prompt = imgElement.dataset.prompt || '';
+    const originalPrompt = imgElement.dataset.originalPrompt || null;
+
+    // Find all images in the same grid for navigation
+    const grid = imgElement.closest('.image-grid');
+    if (grid) {
+        currentImageList = Array.from(grid.querySelectorAll('.image-card img'));
+        currentImageIndex = currentImageList.indexOf(imgElement);
+    } else {
+        currentImageList = [];
+        currentImageIndex = -1;
+    }
+
+    openModal(imageSrc, prompt, originalPrompt);
+}
+
 // Open image modal
-function openModal(imageSrc) {
+function openModal(imageSrc, prompt, originalPrompt) {
     const modal = document.getElementById('imageModal');
     const modalImg = document.getElementById('modalImage');
+    const modalPrompts = document.getElementById('modalPrompts');
 
     modal.classList.add('active');
     modalImg.src = imageSrc;
+
+    // Build prompt display
+    let promptHtml = '';
+    if (originalPrompt && originalPrompt.trim()) {
+        // Show both original and varied prompts
+        promptHtml = `
+            <div class="prompt-section">
+                <div class="prompt-label original">Original Prompt</div>
+                <div class="prompt-text">${escapeHtml(originalPrompt)}</div>
+            </div>
+            <div class="prompt-section">
+                <div class="prompt-label">Varied Prompt (used for generation)</div>
+                <div class="prompt-text">${escapeHtml(prompt)}</div>
+            </div>
+        `;
+    } else if (prompt) {
+        // Just show the prompt
+        promptHtml = `
+            <div class="prompt-section">
+                <div class="prompt-label">Prompt</div>
+                <div class="prompt-text">${escapeHtml(prompt)}</div>
+            </div>
+        `;
+    }
+    modalPrompts.innerHTML = promptHtml;
 }
 
 // Close image modal
 function closeModal() {
     const modal = document.getElementById('imageModal');
     modal.classList.remove('active');
+    // Clear prompts
+    const modalPrompts = document.getElementById('modalPrompts');
+    if (modalPrompts) {
+        modalPrompts.innerHTML = '';
+    }
 }
 
-// Close modal on escape key
+// Navigate to previous image in modal
+function navigatePrevImage() {
+    if (currentImageIndex > 0 && currentImageList.length > 0) {
+        currentImageIndex--;
+        const imgElement = currentImageList[currentImageIndex];
+        const modalImg = document.getElementById('modalImage');
+        const modalPrompts = document.getElementById('modalPrompts');
+
+        modalImg.src = imgElement.src;
+
+        const prompt = imgElement.dataset.prompt || '';
+        const originalPrompt = imgElement.dataset.originalPrompt || null;
+        updateModalPrompts(prompt, originalPrompt);
+    }
+}
+
+// Navigate to next image in modal
+function navigateNextImage() {
+    if (currentImageIndex < currentImageList.length - 1 && currentImageList.length > 0) {
+        currentImageIndex++;
+        const imgElement = currentImageList[currentImageIndex];
+        const modalImg = document.getElementById('modalImage');
+
+        modalImg.src = imgElement.src;
+
+        const prompt = imgElement.dataset.prompt || '';
+        const originalPrompt = imgElement.dataset.originalPrompt || null;
+        updateModalPrompts(prompt, originalPrompt);
+    }
+}
+
+// Update modal prompts display
+function updateModalPrompts(prompt, originalPrompt) {
+    const modalPrompts = document.getElementById('modalPrompts');
+    let promptHtml = '';
+    if (originalPrompt && originalPrompt.trim()) {
+        promptHtml = `
+            <div class="prompt-section">
+                <div class="prompt-label original">Original Prompt</div>
+                <div class="prompt-text">${escapeHtml(originalPrompt)}</div>
+            </div>
+            <div class="prompt-section">
+                <div class="prompt-label">Varied Prompt (used for generation)</div>
+                <div class="prompt-text">${escapeHtml(prompt)}</div>
+            </div>
+        `;
+    } else if (prompt) {
+        promptHtml = `
+            <div class="prompt-section">
+                <div class="prompt-label">Prompt</div>
+                <div class="prompt-text">${escapeHtml(prompt)}</div>
+            </div>
+        `;
+    }
+    modalPrompts.innerHTML = promptHtml;
+}
+
+// Handle keyboard navigation
 document.addEventListener('keydown', function(event) {
+    const modal = document.getElementById('imageModal');
+    const isModalOpen = modal && modal.classList.contains('active');
+
     if (event.key === 'Escape') {
         closeModal();
+    } else if (isModalOpen && event.key === 'ArrowLeft') {
+        event.preventDefault();
+        navigatePrevImage();
+    } else if (isModalOpen && event.key === 'ArrowRight') {
+        event.preventDefault();
+        navigateNextImage();
     }
 });
 

@@ -171,18 +171,68 @@
             height: 100%;
             background: rgba(0, 0, 0, 0.9);
             z-index: 1000;
-            justify-content: center;
-            align-items: center;
+            overflow-y: auto;
         }
 
         .modal.active {
+            display: block;
+        }
+
+        .modal-content {
             display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100%;
+            padding: 1rem;
+            box-sizing: border-box;
         }
 
         .modal img {
-            max-width: 90%;
-            max-height: 90%;
+            max-width: 100%;
+            width: auto;
+            height: auto;
+            max-height: calc(100vh - 2rem);
             object-fit: contain;
+        }
+
+        .modal-prompts {
+            background: var(--pico-card-background-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+            max-width: 100%;
+            width: 600px;
+            flex-shrink: 0;
+        }
+
+        .modal-prompts:empty {
+            display: none;
+        }
+
+        .modal-prompts .prompt-section {
+            margin-bottom: 0.75rem;
+        }
+
+        .modal-prompts .prompt-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .modal-prompts .prompt-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--pico-muted-color);
+            text-transform: uppercase;
+            margin-bottom: 0.25rem;
+        }
+
+        .modal-prompts .prompt-label.original {
+            color: #9b59b6;
+        }
+
+        .modal-prompts .prompt-text {
+            font-size: 0.9rem;
+            line-height: 1.4;
+            word-break: break-word;
         }
 
         .modal .close {
@@ -270,7 +320,10 @@
     <!-- Image Modal -->
     <div id="imageModal" class="modal" onclick="closeModal()">
         <span class="close">&times;</span>
-        <img id="modalImage" src="" alt="Full size image">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <img id="modalImage" src="" alt="Full size image">
+            <div id="modalPrompts" class="modal-prompts"></div>
+        </div>
     </div>
 
     <script src="/static/app.js"></script>
