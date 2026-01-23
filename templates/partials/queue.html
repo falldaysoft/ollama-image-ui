@@ -1,0 +1,24 @@
+{% if queue.jobs %}
+    {% for job in queue.jobs %}
+    <div class="queue-item" id="job-{{ job.id }}">
+        <div class="queue-item-header">
+            <span class="prompt" title="{{ job.prompt }}">{{ job.prompt }}</span>
+            <span class="status status-{{ job.status }} {% if job.status == 'processing' %}processing-indicator{% endif %}">
+                {{ job.status }}
+            </span>
+            {% if job.status == 'pending' %}
+            <button class="secondary outline" style="margin-left: 0.5rem; padding: 0.25rem 0.5rem; font-size: 0.75rem;"
+                    onclick="cancelJob('{{ job.id }}')">Cancel</button>
+            {% endif %}
+        </div>
+        {% if job.status == 'processing' %}
+        <div class="progress-container">
+            <div class="progress-bar" id="progress-bar-{{ job.id }}" style="width: {{ job.progress|default(0) }}%"></div>
+        </div>
+        <div class="progress-status" id="progress-status-{{ job.id }}">{{ job.progress_status|default('Starting...') }}</div>
+        {% endif %}
+    </div>
+    {% endfor %}
+{% else %}
+    <p class="empty-state">No jobs in queue</p>
+{% endif %}

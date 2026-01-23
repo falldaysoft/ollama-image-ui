@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Gallery - Ollama Image Generator{% endblock %}
+
+{% block content %}
+<section>
+    <h2>Image Gallery</h2>
+    <div id="galleryImages" class="image-grid">
+        {% if images %}
+            {% for image in images %}
+            <div class="image-card" id="image-{{ image.id }}">
+                <img src="/images/{{ image.filename }}"
+                     alt="{{ image.prompt }}"
+                     onclick="openModal('/images/{{ image.filename }}')"
+                     loading="lazy">
+                <div class="info">
+                    <p title="{{ image.prompt }}">{{ image.prompt }}</p>
+                    <small style="color: var(--pico-muted-color);">{{ image.model }}</small>
+                </div>
+                <button class="delete-btn" onclick="deleteImage('{{ image.id }}', event)">Delete</button>
+            </div>
+            {% endfor %}
+        {% else %}
+            <p class="empty-state">No images generated yet. <a href="/">Start generating!</a></p>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

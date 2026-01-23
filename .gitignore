@@ -1,0 +1,7 @@
+**/__pycache__
+.playwright-mcp
+images
+data
+.venv
+.claude/settings.local.json
+

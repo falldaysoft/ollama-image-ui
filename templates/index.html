@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="generate-form">
+    <h2>Generate Image</h2>
+    <form id="generateForm" onsubmit="submitGeneration(event)">
+        <label for="prompt">
+            Prompt
+            <textarea id="prompt" name="prompt" placeholder="Describe the image you want to generate..." required></textarea>
+        </label>
+        <div class="form-row">
+            <label for="model">
+                Model
+                <select id="model" name="model">
+                    {% for model in models %}
+                    <option value="{{ model.id }}">{{ model.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <button type="submit" id="generateBtn">Generate</button>
+        </div>
+    </form>
+</section>
+
+<section class="queue-section">
+    <h3>Queue</h3>
+    <div id="queueList">
+        {% include "partials/queue.html" %}
+    </div>
+</section>
+
+<section>
+    <h3>Recent Generations</h3>
+    <div id="recentImages" class="image-grid">
+        {% include "partials/recent_images.html" %}
+    </div>
+</section>
+{% endblock %}

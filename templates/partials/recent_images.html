@@ -1,0 +1,16 @@
+{% if images %}
+    {% for image in images %}
+    <div class="image-card">
+        <img src="/images/{{ image.filename }}"
+             alt="{{ image.prompt }}"
+             onclick="openModal('/images/{{ image.filename }}')"
+             loading="lazy">
+        <div class="info">
+            <p title="{{ image.prompt }}">{{ image.prompt }}</p>
+        </div>
+        <button class="delete-btn" onclick="deleteImage('{{ image.id }}', event)">Delete</button>
+    </div>
+    {% endfor %}
+{% else %}
+    <p class="empty-state">No images generated yet</p>
+{% endif %}
