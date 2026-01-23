@@ -7,6 +7,7 @@ from datetime import datetime
 
 from . import database as db
 from .ollama import generate_image, ProgressUpdate
+from .prompt_bridge import vary_prompt as apply_prompt_variation
 
 
 @dataclass
@@ -20,6 +21,8 @@ class Job:
     created_at: Optional[str] = None
     progress: int = 0
     progress_status: str = ""
+    vary_prompt: bool = False
+    varied_prompt: Optional[str] = None
 
 
 class QueueManager:
@@ -44,7 +47,9 @@ class QueueManager:
                 prompt=job_data["prompt"],
                 model=job_data["model"],
                 status="pending",
-                created_at=job_data["created_at"]
+                created_at=job_data["created_at"],
+                vary_prompt=bool(job_data.get("vary_prompt", 0)),
+                varied_prompt=job_data.get("varied_prompt")
             )
             await self._queue.put(job)
 
@@ -59,7 +64,7 @@ class QueueManager:
             except asyncio.CancelledError:
                 pass
 
-    async def add_job(self, prompt: str, model: str) -> Job:
+    async def add_job(self, prompt: str, model: str, vary_prompt: bool = False) -> Job:
         """Add a new job to the queue."""
         job_id = str(uuid.uuid4())
         job = Job(
@@ -67,11 +72,12 @@ class QueueManager:
             prompt=prompt,
             model=model,
             status="pending",
-            created_at=datetime.utcnow().isoformat()
+            created_at=datetime.utcnow().isoformat(),
+            vary_prompt=vary_prompt
         )
 
         # Save to database
-        await db.create_job(job_id, prompt, model)
+        await db.create_job(job_id, prompt, model, vary_prompt=vary_prompt)
 
         # Add to queue
         await self._queue.put(job)
@@ -109,9 +115,12 @@ class QueueManager:
                 # Add current progress from in-memory state
                 job_data["progress"] = self._processing.progress
                 job_data["progress_status"] = self._processing.progress_status
+                job_data["varied_prompt"] = self._processing.varied_prompt
             else:
                 job_data["progress"] = 0
                 job_data["progress_status"] = ""
+            # Convert vary_prompt from int to bool for consistency
+            job_data["vary_prompt"] = bool(job_data.get("vary_prompt", 0))
             all_jobs.append(job_data)
 
         return {
@@ -170,6 +179,30 @@ class QueueManager:
                     "event": "job_started",
                     "job": self._job_to_dict(job)
                 })
+
+                # Apply prompt variation if requested
+                prompt_for_generation = job.prompt
+                if job.vary_prompt:
+                    job.progress = 0
+                    job.progress_status = "Varying prompt..."
+                    await self._broadcast({
+                        "event": "job_progress",
+                        "job_id": job.id,
+                        "progress": job.progress,
+                        "progress_status": job.progress_status
+                    })
+
+                    try:
+                        varied = await apply_prompt_variation(job.prompt)
+                        job.varied_prompt = varied
+                        prompt_for_generation = varied
+                        # Save varied prompt to database
+                        await db.update_job_status(job.id, "processing", varied_prompt=varied)
+                        print(f"[DEBUG] Varied prompt for job {job.id}: {varied[:100]}...")
+                    except Exception as e:
+                        print(f"[DEBUG] Prompt variation failed for job {job.id}: {e}")
+                        # Fall back to original prompt on failure
+                        prompt_for_generation = job.prompt
 
                 # Send initial progress status
                 job.progress = 0
@@ -243,7 +276,7 @@ class QueueManager:
 
                 # Generate the image
                 print(f"[DEBUG] Starting image generation for job {job.id}")
-                result = await generate_image(job.prompt, job.model, on_progress)
+                result = await generate_image(prompt_for_generation, job.model, on_progress)
                 print(f"[DEBUG] Image generation complete for job {job.id}, success={result.success}")
 
                 # Stop the broadcast task
@@ -314,7 +347,9 @@ class QueueManager:
             "error": job.error,
             "created_at": job.created_at,
             "progress": job.progress,
-            "progress_status": job.progress_status
+            "progress_status": job.progress_status,
+            "vary_prompt": job.vary_prompt,
+            "varied_prompt": job.varied_prompt
         }
 
 

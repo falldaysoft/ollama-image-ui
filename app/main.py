@@ -74,7 +74,11 @@ async def generate(request: GenerateRequest):
     if not request.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt cannot be empty")
 
-    job = await queue_manager.add_job(request.prompt.strip(), request.model)
+    job = await queue_manager.add_job(
+        request.prompt.strip(),
+        request.model,
+        vary_prompt=request.vary_prompt
+    )
     return {"job_id": job.id, "status": job.status}
 
 

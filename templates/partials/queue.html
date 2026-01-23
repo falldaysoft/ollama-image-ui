@@ -3,6 +3,9 @@
     <div class="queue-item" id="job-{{ job.id }}">
         <div class="queue-item-header">
             <span class="prompt" title="{{ job.prompt }}">{{ job.prompt }}</span>
+            {% if job.vary_prompt %}
+            <span class="vary-badge" title="Prompt will be varied">vary</span>
+            {% endif %}
             <span class="status status-{{ job.status }} {% if job.status == 'processing' %}processing-indicator{% endif %}">
                 {{ job.status }}
             </span>
@@ -11,6 +14,11 @@
                     onclick="cancelJob('{{ job.id }}')">Cancel</button>
             {% endif %}
         </div>
+        {% if job.varied_prompt %}
+        <div class="varied-prompt" title="{{ job.varied_prompt }}">
+            <small><strong>Varied:</strong> {{ job.varied_prompt }}</small>
+        </div>
+        {% endif %}
         {% if job.status == 'processing' %}
         <div class="progress-container">
             <div class="progress-bar" id="progress-bar-{{ job.id }}" style="width: {{ job.progress|default(0) }}%"></div>

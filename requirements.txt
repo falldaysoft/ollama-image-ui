@@ -4,3 +4,6 @@ aiosqlite
 python-multipart
 sse-starlette
 jinja2
+transformers
+torch
+accelerate

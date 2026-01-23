@@ -208,6 +208,48 @@
         .processing-indicator {
             animation: pulse 1.5s ease-in-out infinite;
         }
+
+        .checkbox-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            margin-bottom: 1rem;
+            width: auto;
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            width: 1.2rem;
+            height: 1.2rem;
+            margin: 0;
+            flex-shrink: 0;
+        }
+
+        .vary-badge {
+            background: #9b59b6;
+            color: white;
+            padding: 0.15rem 0.4rem;
+            border-radius: 3px;
+            font-size: 0.7rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            margin-right: 0.5rem;
+        }
+
+        .varied-prompt {
+            margin-top: 0.5rem;
+            padding: 0.5rem;
+            background: rgba(155, 89, 182, 0.1);
+            border-left: 3px solid #9b59b6;
+            border-radius: 0 4px 4px 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .varied-prompt small {
+            color: var(--pico-muted-color);
+        }
     </style>
 </head>
 <body>

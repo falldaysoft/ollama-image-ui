@@ -28,9 +28,21 @@ async def init_db():
                 error TEXT,
                 created_at TIMESTAMP,
                 completed_at TIMESTAMP,
+                vary_prompt INTEGER DEFAULT 0,
+                varied_prompt TEXT,
                 FOREIGN KEY (image_id) REFERENCES images(id)
             )
         """)
+
+        # Migration: add vary_prompt and varied_prompt columns if they don't exist
+        try:
+            await db.execute("ALTER TABLE jobs ADD COLUMN vary_prompt INTEGER DEFAULT 0")
+        except Exception:
+            pass  # Column already exists
+        try:
+            await db.execute("ALTER TABLE jobs ADD COLUMN varied_prompt TEXT")
+        except Exception:
+            pass  # Column already exists
         await db.commit()
 
 
@@ -98,13 +110,13 @@ async def delete_image(id: str) -> bool:
 
 
 # Job operations
-async def create_job(id: str, prompt: str, model: str) -> dict:
+async def create_job(id: str, prompt: str, model: str, vary_prompt: bool = False) -> dict:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         now = datetime.utcnow().isoformat()
         await db.execute(
-            "INSERT INTO jobs (id, prompt, model, status, created_at) VALUES (?, ?, ?, ?, ?)",
-            (id, prompt, model, "pending", now)
+            "INSERT INTO jobs (id, prompt, model, status, created_at, vary_prompt) VALUES (?, ?, ?, ?, ?, ?)",
+            (id, prompt, model, "pending", now, 1 if vary_prompt else 0)
         )
         await db.commit()
         cursor = await db.execute("SELECT * FROM jobs WHERE id = ?", (id,))
@@ -116,16 +128,25 @@ async def update_job_status(
     id: str,
     status: str,
     image_id: Optional[str] = None,
-    error: Optional[str] = None
+    error: Optional[str] = None,
+    varied_prompt: Optional[str] = None
 ) -> Optional[dict]:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         completed_at = datetime.utcnow().isoformat() if status in ("completed", "failed") else None
-        await db.execute(
-            """UPDATE jobs SET status = ?, image_id = ?, error = ?, completed_at = ?
-               WHERE id = ?""",
-            (status, image_id, error, completed_at, id)
-        )
+
+        if varied_prompt is not None:
+            await db.execute(
+                """UPDATE jobs SET status = ?, image_id = ?, error = ?, completed_at = ?, varied_prompt = ?
+                   WHERE id = ?""",
+                (status, image_id, error, completed_at, varied_prompt, id)
+            )
+        else:
+            await db.execute(
+                """UPDATE jobs SET status = ?, image_id = ?, error = ?, completed_at = ?
+                   WHERE id = ?""",
+                (status, image_id, error, completed_at, id)
+            )
         await db.commit()
         cursor = await db.execute("SELECT * FROM jobs WHERE id = ?", (id,))
         row = await cursor.fetchone()

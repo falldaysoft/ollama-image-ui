@@ -5,6 +5,7 @@ async function submitGeneration(event) {
     const form = event.target;
     const prompt = form.prompt.value.trim();
     const model = form.model.value;
+    const varyPrompt = form.vary_prompt?.checked || false;
     const btn = form.querySelector('button[type="submit"]');
 
     if (!prompt) return;
@@ -16,7 +17,7 @@ async function submitGeneration(event) {
         const response = await fetch('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt, model })
+            body: JSON.stringify({ prompt, model, vary_prompt: varyPrompt })
         });
 
         if (!response.ok) {
@@ -263,13 +264,25 @@ function updateQueueFromData(data) {
                <div class="progress-status" id="progress-status-${job.id}">${escapeHtml(job.progress_status || 'Starting...')}</div>`
             : '';
 
+        const varyBadge = job.vary_prompt
+            ? `<span class="vary-badge" title="Prompt will be varied">vary</span>`
+            : '';
+
+        const variedPromptSection = job.varied_prompt
+            ? `<div class="varied-prompt" title="${escapeHtml(job.varied_prompt)}">
+                   <small><strong>Varied:</strong> ${escapeHtml(job.varied_prompt)}</small>
+               </div>`
+            : '';
+
         html += `
             <div class="queue-item" id="job-${job.id}">
                 <div class="queue-item-header">
                     <span class="prompt" title="${escapeHtml(job.prompt)}">${escapeHtml(job.prompt)}</span>
+                    ${varyBadge}
                     <span class="status status-${job.status} ${processingClass}">${job.status}</span>
                     ${cancelBtn}
                 </div>
+                ${variedPromptSection}
                 ${progressSection}
             </div>
         `;
