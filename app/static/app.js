@@ -24,7 +24,6 @@ async function submitGeneration(event) {
             throw new Error(error.detail || 'Failed to submit generation');
         }
 
-        form.prompt.value = '';
         refreshQueue();
     } catch (error) {
         alert('Error: ' + error.message);
