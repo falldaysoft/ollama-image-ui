@@ -198,7 +198,8 @@ let currentImageList = [];
 // Gallery preferences
 let galleryPreferences = {
     thumbnailSize: 180,
-    autoShowNew: true
+    autoShowNew: true,
+    galleryWidth: 300
 };
 
 // Display image in center viewer
@@ -707,7 +708,11 @@ function updateThumbnailSize(size) {
     galleryPreferences.thumbnailSize = size;
     saveGalleryPreferences();
 
-    // Update CSS custom property
+    // Update CSS custom property for grid min size (slightly larger than thumbnail for padding/borders)
+    const gridMin = Math.max(60, size + 20);
+    document.documentElement.style.setProperty('--thumbnail-grid-min', `${gridMin}px`);
+
+    // Update thumbnail heights
     const galleryImages = document.getElementById('galleryImages');
     if (galleryImages) {
         const images = galleryImages.querySelectorAll('.image-card img');
@@ -723,10 +728,59 @@ function updateThumbnailSize(size) {
     }
 }
 
+// Update gallery width
+function updateGalleryWidth(width) {
+    galleryPreferences.galleryWidth = width;
+    saveGalleryPreferences();
+
+    // Update CSS custom property
+    document.documentElement.style.setProperty('--gallery-width', `${width}px`);
+}
+
+// Initialize gallery resize handle
+function initGalleryResize() {
+    const handle = document.getElementById('galleryResizeHandle');
+    if (!handle) return;
+
+    let isDragging = false;
+    let startX = 0;
+    let startWidth = 0;
+
+    handle.addEventListener('mousedown', function(e) {
+        isDragging = true;
+        startX = e.clientX;
+        startWidth = galleryPreferences.galleryWidth;
+        handle.classList.add('dragging');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', function(e) {
+        if (!isDragging) return;
+
+        const delta = startX - e.clientX;
+        const newWidth = Math.max(250, Math.min(800, startWidth + delta));
+        updateGalleryWidth(newWidth);
+    });
+
+    document.addEventListener('mouseup', function() {
+        if (isDragging) {
+            isDragging = false;
+            handle.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        }
+    });
+}
+
 // Initialize gallery controls
 function initGalleryControls() {
     const thumbnailSize = document.getElementById('thumbnailSize');
     const autoShowNew = document.getElementById('autoShowNew');
+
+    // Initialize gallery width
+    updateGalleryWidth(galleryPreferences.galleryWidth);
 
     if (thumbnailSize) {
         thumbnailSize.value = galleryPreferences.thumbnailSize;
@@ -745,6 +799,9 @@ function initGalleryControls() {
             saveGalleryPreferences();
         });
     }
+
+    // Initialize resize handle
+    initGalleryResize();
 }
 
 // Initialize SSE on all pages for queue summary updates
