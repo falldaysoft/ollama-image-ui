@@ -7,6 +7,8 @@ async function submitGeneration(event) {
     const model = form.model.value;
     const varyMode = form.vary_mode?.value || null;
     const count = parseInt(document.getElementById('count')?.value, 10) || 1;
+    const width = form.width?.value ? parseInt(form.width.value, 10) : null;
+    const height = form.height?.value ? parseInt(form.height.value, 10) : null;
     const btn = form.querySelector('button[type="submit"]');
 
     if (!prompt) return;
@@ -18,7 +20,7 @@ async function submitGeneration(event) {
         const response = await fetch('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt, model, vary_mode: varyMode || null, count })
+            body: JSON.stringify({ prompt, model, vary_mode: varyMode || null, count, width, height })
         });
 
         if (!response.ok) {

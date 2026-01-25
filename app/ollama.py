@@ -100,7 +100,9 @@ def parse_progress(line: str) -> Optional[ProgressUpdate]:
 async def generate_image(
     prompt: str,
     model: str,
-    progress_callback: Optional[Callable[[ProgressUpdate], None]] = None
+    progress_callback: Optional[Callable[[ProgressUpdate], None]] = None,
+    width: Optional[int] = None,
+    height: Optional[int] = None
 ) -> GenerationResult:
     """
     Generate an image using Ollama CLI.
@@ -118,9 +120,17 @@ async def generate_image(
     existing_jpgs = set(cwd.glob("*.jpg")) | set(cwd.glob("*.jpeg"))
 
     try:
+        # Build command with optional size parameters
+        cmd = ["ollama", "run"]
+        if width is not None:
+            cmd.extend(["--width", str(width)])
+        if height is not None:
+            cmd.extend(["--height", str(height)])
+        cmd.extend([model, prompt])
+
         # Run ollama CLI
         process = await asyncio.create_subprocess_exec(
-            "ollama", "run", model, prompt,
+            *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(cwd)

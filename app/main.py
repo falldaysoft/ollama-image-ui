@@ -97,7 +97,9 @@ async def generate(request: GenerateRequest):
         job = await queue_manager.add_job(
             request.prompt.strip(),
             request.model,
-            vary_mode=request.vary_mode
+            vary_mode=request.vary_mode,
+            width=request.width,
+            height=request.height
         )
         jobs.append({"job_id": job.id, "status": job.status})
 

@@ -8,6 +8,8 @@ class GenerateRequest(BaseModel):
     model: str = "x/flux2-klein:4b-fp4"
     vary_mode: Optional[str] = None  # None, "expand", or "expand_concise"
     count: int = 1  # Number of generations to queue
+    width: Optional[int] = None  # Image width
+    height: Optional[int] = None  # Image height
 
 
 class JobResponse(BaseModel):
@@ -21,6 +23,8 @@ class JobResponse(BaseModel):
     completed_at: Optional[str] = None
     vary_mode: Optional[str] = None  # None, "expand", or "expand_concise"
     varied_prompt: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
 
 
 class ImageResponse(BaseModel):
@@ -30,6 +34,8 @@ class ImageResponse(BaseModel):
     model: str
     original_prompt: Optional[str] = None
     created_at: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
 
 
 class QueueStatus(BaseModel):

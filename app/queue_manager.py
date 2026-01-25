@@ -23,6 +23,8 @@ class Job:
     progress_status: str = ""
     vary_mode: Optional[str] = None  # None, "expand", or "expand_concise"
     varied_prompt: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
 
 
 class QueueManager:
@@ -49,7 +51,9 @@ class QueueManager:
                 status="pending",
                 created_at=job_data["created_at"],
                 vary_mode=job_data.get("vary_mode"),
-                varied_prompt=job_data.get("varied_prompt")
+                varied_prompt=job_data.get("varied_prompt"),
+                width=job_data.get("width"),
+                height=job_data.get("height")
             )
             await self._queue.put(job)
 
@@ -64,7 +68,7 @@ class QueueManager:
             except asyncio.CancelledError:
                 pass
 
-    async def add_job(self, prompt: str, model: str, vary_mode: Optional[str] = None) -> Job:
+    async def add_job(self, prompt: str, model: str, vary_mode: Optional[str] = None, width: Optional[int] = None, height: Optional[int] = None) -> Job:
         """Add a new job to the queue."""
         job_id = str(uuid.uuid4())
         job = Job(
@@ -73,11 +77,13 @@ class QueueManager:
             model=model,
             status="pending",
             created_at=datetime.utcnow().isoformat(),
-            vary_mode=vary_mode
+            vary_mode=vary_mode,
+            width=width,
+            height=height
         )
 
         # Save to database
-        await db.create_job(job_id, prompt, model, vary_mode=vary_mode)
+        await db.create_job(job_id, prompt, model, vary_mode=vary_mode, width=width, height=height)
 
         # Add to queue
         await self._queue.put(job)
@@ -274,7 +280,7 @@ class QueueManager:
 
                 # Generate the image
                 print(f"[DEBUG] Starting image generation for job {job.id}")
-                result = await generate_image(prompt_for_generation, job.model, on_progress)
+                result = await generate_image(prompt_for_generation, job.model, on_progress, width=job.width, height=job.height)
                 print(f"[DEBUG] Image generation complete for job {job.id}, success={result.success}")
 
                 # Stop the broadcast task
@@ -295,7 +301,9 @@ class QueueManager:
                         result.filename,
                         image_prompt,
                         job.model,
-                        original_prompt=original_prompt
+                        original_prompt=original_prompt,
+                        width=job.width,
+                        height=job.height
                     )
 
                     # Update job status
@@ -353,7 +361,9 @@ class QueueManager:
             "progress": job.progress,
             "progress_status": job.progress_status,
             "vary_mode": job.vary_mode,
-            "varied_prompt": job.varied_prompt
+            "varied_prompt": job.varied_prompt,
+            "width": job.width,
+            "height": job.height
         }
 
 
