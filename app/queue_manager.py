@@ -21,7 +21,7 @@ class Job:
     created_at: Optional[str] = None
     progress: int = 0
     progress_status: str = ""
-    vary_prompt: bool = False
+    vary_mode: Optional[str] = None  # None, "expand", or "expand_concise"
     varied_prompt: Optional[str] = None
 
 
@@ -48,7 +48,7 @@ class QueueManager:
                 model=job_data["model"],
                 status="pending",
                 created_at=job_data["created_at"],
-                vary_prompt=bool(job_data.get("vary_prompt", 0)),
+                vary_mode=job_data.get("vary_mode"),
                 varied_prompt=job_data.get("varied_prompt")
             )
             await self._queue.put(job)
@@ -64,7 +64,7 @@ class QueueManager:
             except asyncio.CancelledError:
                 pass
 
-    async def add_job(self, prompt: str, model: str, vary_prompt: bool = False) -> Job:
+    async def add_job(self, prompt: str, model: str, vary_mode: Optional[str] = None) -> Job:
         """Add a new job to the queue."""
         job_id = str(uuid.uuid4())
         job = Job(
@@ -73,11 +73,11 @@ class QueueManager:
             model=model,
             status="pending",
             created_at=datetime.utcnow().isoformat(),
-            vary_prompt=vary_prompt
+            vary_mode=vary_mode
         )
 
         # Save to database
-        await db.create_job(job_id, prompt, model, vary_prompt=vary_prompt)
+        await db.create_job(job_id, prompt, model, vary_mode=vary_mode)
 
         # Add to queue
         await self._queue.put(job)
@@ -119,8 +119,6 @@ class QueueManager:
             else:
                 job_data["progress"] = 0
                 job_data["progress_status"] = ""
-            # Convert vary_prompt from int to bool for consistency
-            job_data["vary_prompt"] = bool(job_data.get("vary_prompt", 0))
             all_jobs.append(job_data)
 
         return {
@@ -182,7 +180,7 @@ class QueueManager:
 
                 # Apply prompt variation if requested
                 prompt_for_generation = job.prompt
-                if job.vary_prompt:
+                if job.vary_mode:
                     job.progress = 0
                     job.progress_status = "Varying prompt..."
                     await self._broadcast({
@@ -193,7 +191,7 @@ class QueueManager:
                     })
 
                     try:
-                        varied = await apply_prompt_variation(job.prompt)
+                        varied = await apply_prompt_variation(job.prompt, mode=job.vary_mode)
                         job.varied_prompt = varied
                         prompt_for_generation = varied
                         # Save varied prompt to database
@@ -288,11 +286,16 @@ class QueueManager:
 
                 if result.success:
                     # Save image to database
+                    # If prompt was varied, store the varied prompt as the main prompt
+                    # and the original as original_prompt
+                    image_prompt = prompt_for_generation
+                    original_prompt = job.prompt if job.varied_prompt else None
                     await db.create_image(
                         result.image_id,
                         result.filename,
-                        job.prompt,
-                        job.model
+                        image_prompt,
+                        job.model,
+                        original_prompt=original_prompt
                     )
 
                     # Update job status
@@ -306,7 +309,8 @@ class QueueManager:
                         "image": {
                             "id": result.image_id,
                             "filename": result.filename,
-                            "prompt": job.prompt,
+                            "prompt": image_prompt,
+                            "original_prompt": original_prompt,
                             "model": job.model
                         }
                     })
@@ -348,7 +352,7 @@ class QueueManager:
             "created_at": job.created_at,
             "progress": job.progress,
             "progress_status": job.progress_status,
-            "vary_prompt": job.vary_prompt,
+            "vary_mode": job.vary_mode,
             "varied_prompt": job.varied_prompt
         }
 

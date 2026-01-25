@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Queue - Ollama Image Generator{% endblock %}
+
+{% block left_panel %}
+<section>
+    <h2>Generation Queue</h2>
+    <div id="queueList">
+        {% include "partials/queue.html" %}
+    </div>
+</section>
+{% endblock %}
+
+{% block center_panel %}
+{% endblock %}

@@ -6,7 +6,8 @@ from datetime import datetime
 class GenerateRequest(BaseModel):
     prompt: str
     model: str = "x/flux2-klein:4b-fp4"
-    vary_prompt: bool = False
+    vary_mode: Optional[str] = None  # None, "expand", or "expand_concise"
+    count: int = 1  # Number of generations to queue
 
 
 class JobResponse(BaseModel):
@@ -18,7 +19,7 @@ class JobResponse(BaseModel):
     error: Optional[str] = None
     created_at: Optional[str] = None
     completed_at: Optional[str] = None
-    vary_prompt: bool = False
+    vary_mode: Optional[str] = None  # None, "expand", or "expand_concise"
     varied_prompt: Optional[str] = None
 
 
@@ -27,6 +28,7 @@ class ImageResponse(BaseModel):
     filename: str
     prompt: str
     model: str
+    original_prompt: Optional[str] = None
     created_at: Optional[str] = None
 
 

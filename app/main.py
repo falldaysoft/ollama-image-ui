@@ -40,7 +40,7 @@ templates = Jinja2Templates(directory=TEMPLATES_DIR)
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     """Main generation page."""
-    images = await db.get_images(limit=12)
+    images = await db.get_images(limit=20)
     queue_status = await queue_manager.get_queue_status()
     return templates.TemplateResponse(
         "index.html",
@@ -66,6 +66,21 @@ async def gallery(request: Request):
     )
 
 
+@app.get("/queue", response_class=HTMLResponse)
+async def queue_page(request: Request):
+    """Queue management page."""
+    images = await db.get_images(limit=20)
+    queue_status = await queue_manager.get_queue_status()
+    return templates.TemplateResponse(
+        "queue.html",
+        {
+            "request": request,
+            "queue": queue_status,
+            "images": images
+        }
+    )
+
+
 # ============ API Routes ============
 
 @app.post("/api/generate")
@@ -74,12 +89,21 @@ async def generate(request: GenerateRequest):
     if not request.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt cannot be empty")
 
-    job = await queue_manager.add_job(
-        request.prompt.strip(),
-        request.model,
-        vary_prompt=request.vary_prompt
-    )
-    return {"job_id": job.id, "status": job.status}
+    # Clamp count to reasonable range
+    count = max(1, min(request.count, 100))
+
+    jobs = []
+    for _ in range(count):
+        job = await queue_manager.add_job(
+            request.prompt.strip(),
+            request.model,
+            vary_mode=request.vary_mode
+        )
+        jobs.append({"job_id": job.id, "status": job.status})
+
+    if len(jobs) == 1:
+        return jobs[0]
+    return {"jobs": jobs, "count": len(jobs)}
 
 
 @app.get("/api/queue")
@@ -158,7 +182,7 @@ async def queue_partial(request: Request):
 @app.get("/partials/recent-images", response_class=HTMLResponse)
 async def recent_images_partial(request: Request):
     """Return recent images HTML partial for htmx updates."""
-    images = await db.get_images(limit=12)
+    images = await db.get_images(limit=20)
     return templates.TemplateResponse(
         "partials/recent_images.html",
         {"request": request, "images": images}

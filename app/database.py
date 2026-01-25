@@ -15,6 +15,7 @@ async def init_db():
                 filename TEXT NOT NULL,
                 prompt TEXT NOT NULL,
                 model TEXT NOT NULL,
+                original_prompt TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -28,19 +29,24 @@ async def init_db():
                 error TEXT,
                 created_at TIMESTAMP,
                 completed_at TIMESTAMP,
-                vary_prompt INTEGER DEFAULT 0,
+                vary_mode TEXT,
                 varied_prompt TEXT,
                 FOREIGN KEY (image_id) REFERENCES images(id)
             )
         """)
 
-        # Migration: add vary_prompt and varied_prompt columns if they don't exist
+        # Migration: add vary_mode and varied_prompt columns if they don't exist
         try:
-            await db.execute("ALTER TABLE jobs ADD COLUMN vary_prompt INTEGER DEFAULT 0")
+            await db.execute("ALTER TABLE jobs ADD COLUMN vary_mode TEXT")
         except Exception:
             pass  # Column already exists
         try:
             await db.execute("ALTER TABLE jobs ADD COLUMN varied_prompt TEXT")
+        except Exception:
+            pass  # Column already exists
+        # Migration: add original_prompt column to images if it doesn't exist
+        try:
+            await db.execute("ALTER TABLE images ADD COLUMN original_prompt TEXT")
         except Exception:
             pass  # Column already exists
         await db.commit()
@@ -52,12 +58,12 @@ async def get_db():
 
 
 # Image operations
-async def create_image(id: str, filename: str, prompt: str, model: str) -> dict:
+async def create_image(id: str, filename: str, prompt: str, model: str, original_prompt: Optional[str] = None) -> dict:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         await db.execute(
-            "INSERT INTO images (id, filename, prompt, model) VALUES (?, ?, ?, ?)",
-            (id, filename, prompt, model)
+            "INSERT INTO images (id, filename, prompt, model, original_prompt) VALUES (?, ?, ?, ?, ?)",
+            (id, filename, prompt, model, original_prompt)
         )
         await db.commit()
         cursor = await db.execute("SELECT * FROM images WHERE id = ?", (id,))
@@ -110,13 +116,13 @@ async def delete_image(id: str) -> bool:
 
 
 # Job operations
-async def create_job(id: str, prompt: str, model: str, vary_prompt: bool = False) -> dict:
+async def create_job(id: str, prompt: str, model: str, vary_mode: Optional[str] = None) -> dict:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         now = datetime.utcnow().isoformat()
         await db.execute(
-            "INSERT INTO jobs (id, prompt, model, status, created_at, vary_prompt) VALUES (?, ?, ?, ?, ?, ?)",
-            (id, prompt, model, "pending", now, 1 if vary_prompt else 0)
+            "INSERT INTO jobs (id, prompt, model, status, created_at, vary_mode) VALUES (?, ?, ?, ?, ?, ?)",
+            (id, prompt, model, "pending", now, vary_mode)
         )
         await db.commit()
         cursor = await db.execute("SELECT * FROM jobs WHERE id = ?", (id,))

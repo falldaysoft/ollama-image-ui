@@ -3,8 +3,8 @@
     <div class="queue-item" id="job-{{ job.id }}">
         <div class="queue-item-header">
             <span class="prompt" title="{{ job.prompt }}">{{ job.prompt }}</span>
-            {% if job.vary_prompt %}
-            <span class="vary-badge" title="Prompt will be varied">vary</span>
+            {% if job.vary_mode %}
+            <span class="vary-badge" title="Prompt will be varied">{{ {'expand': 'expand', 'expand_concise': 'sentence', 'expand_keywords': 'keywords'}.get(job.vary_mode, 'vary') }}</span>
             {% endif %}
             <span class="status status-{{ job.status }} {% if job.status == 'processing' %}processing-indicator{% endif %}">
                 {{ job.status }}

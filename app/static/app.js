@@ -5,7 +5,8 @@ async function submitGeneration(event) {
     const form = event.target;
     const prompt = form.prompt.value.trim();
     const model = form.model.value;
-    const varyPrompt = form.vary_prompt?.checked || false;
+    const varyMode = form.vary_mode?.value || null;
+    const count = parseInt(document.getElementById('count')?.value, 10) || 1;
     const btn = form.querySelector('button[type="submit"]');
 
     if (!prompt) return;
@@ -17,7 +18,7 @@ async function submitGeneration(event) {
         const response = await fetch('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt, model, vary_prompt: varyPrompt })
+            body: JSON.stringify({ prompt, model, vary_mode: varyMode || null, count })
         });
 
         if (!response.ok) {
@@ -72,10 +73,8 @@ async function deleteImage(imageId, event) {
             card.remove();
         }
 
-        // Also refresh recent images if on main page
-        if (document.getElementById('recentImages')) {
-            refreshRecentImages();
-        }
+        // Refresh gallery sidebar
+        refreshRecentImages();
     } catch (error) {
         alert('Error: ' + error.message);
     }
@@ -116,15 +115,35 @@ async function refreshQueue() {
     }, 100);
 }
 
-// Refresh recent images display
+// Refresh recent images display (gallery sidebar)
 async function refreshRecentImages() {
-    const recentImages = document.getElementById('recentImages');
-    if (!recentImages) return;
+    const galleryImages = document.getElementById('galleryImages');
+    if (!galleryImages) return;
+
+    // Remember current gallery index before refresh
+    const currentIndex = currentGalleryIndex;
 
     try {
         const response = await fetch('/partials/recent-images');
         if (response.ok) {
-            recentImages.innerHTML = await response.text();
+            galleryImages.innerHTML = await response.text();
+
+            const images = galleryImages.querySelectorAll('.image-card img');
+
+            // Auto-display the first (most recent) image in viewer if viewer is empty
+            const imageViewer = document.getElementById('imageViewer');
+            if (imageViewer && imageViewer.querySelector('.image-viewer-placeholder')) {
+                const firstImage = images[0];
+                if (firstImage) {
+                    displayImageInViewer(firstImage);
+                }
+            } else if (images.length > 0) {
+                // Restore the previously selected image or select the first one
+                const imageToDisplay = images[Math.min(currentIndex, images.length - 1)];
+                if (imageToDisplay) {
+                    displayImageInViewer(imageToDisplay);
+                }
+            }
         }
     } catch (error) {
         console.error('Failed to refresh images:', error);
@@ -134,6 +153,60 @@ async function refreshRecentImages() {
 // Track current image index and list for navigation
 let currentImageIndex = -1;
 let currentImageList = [];
+
+// Display image in center viewer
+function displayImageInViewer(imgElement) {
+    const imageViewer = document.getElementById('imageViewer');
+    const imageViewerInfo = document.getElementById('imageViewerInfo');
+
+    if (!imageViewer) return;
+
+    const imageSrc = imgElement.src;
+    const prompt = imgElement.dataset.prompt || '';
+    const originalPrompt = imgElement.dataset.originalPrompt || '';
+
+    // Update current gallery index to match this image
+    const galleryImages = document.getElementById('galleryImages');
+    if (galleryImages) {
+        const images = galleryImages.querySelectorAll('.image-card img');
+        currentGalleryIndex = Array.from(images).indexOf(imgElement);
+        if (currentGalleryIndex === -1) currentGalleryIndex = 0;
+
+        // Highlight the active image in gallery
+        const cards = galleryImages.querySelectorAll('.image-card');
+        cards.forEach(card => card.classList.remove('active'));
+        const activeCard = imgElement.closest('.image-card');
+        if (activeCard) {
+            activeCard.classList.add('active');
+        }
+    }
+
+    // Update viewer content
+    let infoHtml = '';
+    if (originalPrompt && originalPrompt.trim()) {
+        infoHtml = `
+            <div class="prompt-section">
+                <div class="prompt-label original">Original Prompt</div>
+                <div class="prompt-text">${escapeHtml(originalPrompt)}</div>
+            </div>
+            <div class="prompt-section" style="margin-top: 0.75rem;">
+                <div class="prompt-label">Varied Prompt (used for generation)</div>
+                <div class="prompt-text">${escapeHtml(prompt)}</div>
+            </div>
+        `;
+    } else if (prompt) {
+        infoHtml = `
+            <div class="prompt-section">
+                <div class="prompt-label">Prompt</div>
+                <div class="prompt-text">${escapeHtml(prompt)}</div>
+            </div>
+        `;
+    }
+
+    imageViewer.innerHTML = `<img src="${imageSrc}" alt="${escapeHtml(prompt)}" style="cursor: zoom-in;" onclick="openModal('${imageSrc}', \`${prompt}\`, \`${originalPrompt}\`)">`;
+    imageViewerInfo.innerHTML = infoHtml;
+    imageViewerInfo.style.display = infoHtml ? 'block' : 'none';
+}
 
 // Open image modal from element with data attributes
 function openModalFromElement(imgElement) {
@@ -149,6 +222,12 @@ function openModalFromElement(imgElement) {
     } else {
         currentImageList = [];
         currentImageIndex = -1;
+    }
+
+    // If this is from gallery sidebar, display in viewer instead of modal
+    if (imgElement.closest('.gallery-sidebar')) {
+        displayImageInViewer(imgElement);
+        return;
     }
 
     openModal(imageSrc, prompt, originalPrompt);
@@ -257,24 +336,105 @@ function updateModalPrompts(prompt, originalPrompt) {
     modalPrompts.innerHTML = promptHtml;
 }
 
+// Track current gallery image index for keyboard navigation
+let currentGalleryIndex = 0;
+
+// Navigate to previous gallery image
+function navigatePrevGalleryImage() {
+    const galleryImages = document.getElementById('galleryImages');
+    if (!galleryImages) return;
+
+    const images = galleryImages.querySelectorAll('.image-card img');
+    if (images.length === 0) return;
+
+    currentGalleryIndex = currentGalleryIndex > 0 ? currentGalleryIndex - 1 : images.length - 1;
+    displayImageInViewer(images[currentGalleryIndex]);
+
+    // Scroll the gallery to show the selected image
+    images[currentGalleryIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// Navigate to next gallery image
+function navigateNextGalleryImage() {
+    const galleryImages = document.getElementById('galleryImages');
+    if (!galleryImages) return;
+
+    const images = galleryImages.querySelectorAll('.image-card img');
+    if (images.length === 0) return;
+
+    currentGalleryIndex = currentGalleryIndex < images.length - 1 ? currentGalleryIndex + 1 : 0;
+    displayImageInViewer(images[currentGalleryIndex]);
+
+    // Scroll the gallery to show the selected image
+    images[currentGalleryIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 // Handle keyboard navigation
 document.addEventListener('keydown', function(event) {
     const modal = document.getElementById('imageModal');
     const isModalOpen = modal && modal.classList.contains('active');
 
+    // Don't intercept if user is typing in an input/textarea
+    const isTyping = event.target.tagName === 'INPUT' ||
+                     event.target.tagName === 'TEXTAREA' ||
+                     event.target.tagName === 'SELECT' ||
+                     event.target.isContentEditable;
+
+    // Modal navigation
     if (event.key === 'Escape') {
         closeModal();
-    } else if (isModalOpen && event.key === 'ArrowLeft') {
+        return;
+    }
+
+    if (isModalOpen) {
+        if (event.key === 'ArrowLeft') {
+            event.preventDefault();
+            navigatePrevImage();
+        } else if (event.key === 'ArrowRight') {
+            event.preventDefault();
+            navigateNextImage();
+        }
+        return;
+    }
+
+    // Don't handle other shortcuts if typing
+    if (isTyping) return;
+
+    // Page navigation
+    if (event.key === '1') {
         event.preventDefault();
-        navigatePrevImage();
-    } else if (isModalOpen && event.key === 'ArrowRight') {
+        window.location.href = '/';
+    } else if (event.key === '2') {
         event.preventDefault();
-        navigateNextImage();
+        window.location.href = '/queue';
+    }
+
+    // Gallery navigation
+    else if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        navigatePrevGalleryImage();
+    } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        navigateNextGalleryImage();
     }
 });
 
 // Global SSE connection
 let eventSource = null;
+
+// Update queue summary in top bar
+function updateQueueSummary(data) {
+    const pendingCount = document.getElementById('pendingCount');
+    const processingCount = document.getElementById('processingCount');
+
+    if (pendingCount && processingCount) {
+        const pending = data.jobs ? data.jobs.filter(j => j.status === 'pending').length : 0;
+        const processing = data.jobs ? data.jobs.filter(j => j.status === 'processing').length : 0;
+
+        pendingCount.textContent = pending;
+        processingCount.textContent = processing;
+    }
+}
 
 // Set up SSE for real-time updates
 function setupSSE() {
@@ -289,11 +449,13 @@ function setupSSE() {
     eventSource.addEventListener('status', function(e) {
         console.log('[SSE] status event received:', e.data);
         const data = JSON.parse(e.data);
+        updateQueueSummary(data);
         updateQueueFromData(data);
     });
 
     eventSource.addEventListener('job_added', function(e) {
         refreshQueue();
+        refreshQueueSummary();
     });
 
     eventSource.addEventListener('job_started', function(e) {
@@ -329,15 +491,31 @@ function setupSSE() {
 
     eventSource.addEventListener('job_completed', function(e) {
         refreshQueue();
-        refreshRecentImages();
+        refreshQueueSummary();
+
+        // Refresh gallery and update viewer with new image
+        setTimeout(async function() {
+            await refreshRecentImages();
+
+            // Display the newly generated image in the viewer
+            const galleryImages = document.getElementById('galleryImages');
+            if (galleryImages) {
+                const firstImage = galleryImages.querySelector('.image-card img');
+                if (firstImage) {
+                    displayImageInViewer(firstImage);
+                }
+            }
+        }, 100);
     });
 
     eventSource.addEventListener('job_failed', function(e) {
         refreshQueue();
+        refreshQueueSummary();
     });
 
     eventSource.addEventListener('job_cancelled', function(e) {
         refreshQueue();
+        refreshQueueSummary();
     });
 
     eventSource.addEventListener('job_progress', function(e) {
@@ -354,6 +532,19 @@ function setupSSE() {
     };
 
     return eventSource;
+}
+
+// Refresh queue summary from API
+async function refreshQueueSummary() {
+    try {
+        const response = await fetch('/api/queue');
+        if (response.ok) {
+            const data = await response.json();
+            updateQueueSummary(data);
+        }
+    } catch (error) {
+        console.error('Failed to refresh queue summary:', error);
+    }
 }
 
 // Update queue from SSE data
@@ -380,8 +571,9 @@ function updateQueueFromData(data) {
                <div class="progress-status" id="progress-status-${job.id}">${escapeHtml(job.progress_status || 'Starting...')}</div>`
             : '';
 
-        const varyBadge = job.vary_prompt
-            ? `<span class="vary-badge" title="Prompt will be varied">vary</span>`
+        const varyLabels = { 'expand': 'expand', 'expand_concise': 'sentence', 'expand_keywords': 'keywords' };
+        const varyBadge = job.vary_mode
+            ? `<span class="vary-badge" title="Prompt will be varied">${varyLabels[job.vary_mode] || 'vary'}</span>`
             : '';
 
         const variedPromptSection = job.varied_prompt
@@ -427,7 +619,21 @@ function updateJobProgress(jobId, progress, status) {
     }
 }
 
-// Initialize SSE when on the main page
-if (document.getElementById('queueList')) {
-    setupSSE();
-}
+// Initialize SSE on all pages for queue summary updates
+setupSSE();
+
+// Initialize queue summary on page load
+refreshQueueSummary();
+
+// Initialize image viewer with most recent image on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const galleryImages = document.getElementById('galleryImages');
+    const imageViewer = document.getElementById('imageViewer');
+
+    if (galleryImages && imageViewer) {
+        const firstImage = galleryImages.querySelector('.image-card img');
+        if (firstImage) {
+            displayImageInViewer(firstImage);
+        }
+    }
+});

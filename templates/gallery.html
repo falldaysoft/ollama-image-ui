@@ -1,20 +1,23 @@
 {% extends "base.html" %}
 
-{% block title %}Gallery - Ollama Image Generator{% endblock %}
+{% block title %}Full Gallery - Ollama Image Generator{% endblock %}
 
 {% block content %}
 <section>
-    <h2>Image Gallery</h2>
-    <div id="galleryImages" class="image-grid">
+    <h2>Full Image Gallery</h2>
+    <p style="color: var(--pico-muted-color); margin-bottom: 1.5rem;">Showing all generated images. The gallery sidebar shows recent images.</p>
+    <div id="fullGalleryImages" class="image-grid" style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));">
         {% if images %}
             {% for image in images %}
             <div class="image-card" id="image-{{ image.id }}">
                 <img src="/images/{{ image.filename }}"
-                     alt="{{ image.prompt }}"
-                     onclick="openModal('/images/{{ image.filename }}')"
+                     alt="{{ image.original_prompt or image.prompt }}"
+                     data-prompt="{{ image.prompt | e }}"
+                     data-original-prompt="{{ image.original_prompt | e if image.original_prompt else '' }}"
+                     onclick="openModalFromElement(this)"
                      loading="lazy">
                 <div class="info">
-                    <p title="{{ image.prompt }}">{{ image.prompt }}</p>
+                    <p title="{{ image.original_prompt or image.prompt }}">{{ image.original_prompt or image.prompt }}</p>
                     <small style="color: var(--pico-muted-color);">{{ image.model }}</small>
                 </div>
                 <button class="delete-btn" onclick="deleteImage('{{ image.id }}', event)">Delete</button>

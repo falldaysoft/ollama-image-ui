@@ -34,13 +34,8 @@ def _load_model():
     print("[PromptBridge] Model loaded successfully")
 
 
-def _vary_prompt_sync(prompt: str) -> str:
-    """Synchronous prompt variation (runs in thread pool)."""
-    _load_model()
-
-    # Use "Expand the prompt" system instruction for richer image prompts
-    system_instruction = "Expand the prompt"
-
+def _generate_with_instruction(prompt: str, system_instruction: str) -> str:
+    """Generate text with a given system instruction."""
     messages = [
         {"role": "system", "content": system_instruction},
         {"role": "user", "content": prompt}
@@ -65,12 +60,32 @@ def _vary_prompt_sync(prompt: str) -> str:
 
     # Extract only the generated part
     generated_ids = outputs[0][inputs.input_ids.shape[-1]:]
-    varied_prompt = _tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
-
-    return varied_prompt
+    return _tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
 
 
-async def vary_prompt(prompt: str) -> str:
+def _vary_prompt_sync(prompt: str, mode: str = "expand") -> str:
+    """Synchronous prompt variation (runs in thread pool)."""
+    _load_model()
+
+    if mode == "expand":
+        # Just expand the prompt
+        return _generate_with_instruction(prompt, "Expand the prompt.")
+    elif mode == "expand_concise":
+        # First expand, then compress to one sentence
+        expanded = _generate_with_instruction(prompt, "Expand the prompt.")
+        concise = _generate_with_instruction(expanded, "Compress the prompt into one sentence.")
+        return concise
+    elif mode == "expand_keywords":
+        # First expand, then compress to keywords
+        expanded = _generate_with_instruction(prompt, "Expand the prompt.")
+        keywords = _generate_with_instruction(expanded, "Compress the prompt into keyword format.")
+        return keywords
+    else:
+        # Unknown mode, just return original
+        return prompt
+
+
+async def vary_prompt(prompt: str, mode: str = "expand") -> str:
     """
     Vary/expand a prompt using PromptBridge.
 
@@ -79,6 +94,7 @@ async def vary_prompt(prompt: str) -> str:
 
     Args:
         prompt: The original user prompt
+        mode: "expand" for lengthening, "expand_concise" for expand then condense
 
     Returns:
         The varied/expanded prompt
@@ -87,6 +103,6 @@ async def vary_prompt(prompt: str) -> str:
         loop = asyncio.get_event_loop()
         varied = await loop.run_in_executor(
             None,
-            partial(_vary_prompt_sync, prompt)
+            partial(_vary_prompt_sync, prompt, mode)
         )
         return varied
