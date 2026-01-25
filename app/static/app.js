@@ -55,7 +55,9 @@ async function cancelJob(jobId) {
 
 // Delete an image
 async function deleteImage(imageId, event) {
-    event.stopPropagation();
+    if (event) {
+        event.stopPropagation();
+    }
 
     try {
         const response = await fetch(`/api/images/${imageId}`, {
@@ -78,6 +80,44 @@ async function deleteImage(imageId, event) {
     } catch (error) {
         alert('Error: ' + error.message);
     }
+}
+
+// Delete current image in viewer
+async function deleteCurrentImage() {
+    if (!currentImageId) return;
+
+    if (!confirm('Are you sure you want to delete this image?')) {
+        return;
+    }
+
+    const imageId = currentImageId;
+
+    // Navigate to next image before deleting
+    const galleryImages = document.getElementById('galleryImages');
+    if (galleryImages) {
+        const images = galleryImages.querySelectorAll('.image-card img');
+        if (images.length > 1) {
+            // Move to next image (or previous if at end)
+            const nextIndex = currentGalleryIndex < images.length - 1 ? currentGalleryIndex : currentGalleryIndex - 1;
+            if (nextIndex >= 0 && images[nextIndex]) {
+                displayImageInViewer(images[nextIndex]);
+            }
+        } else {
+            // Last image, clear viewer
+            const imageViewer = document.getElementById('imageViewer');
+            const imageViewerInfo = document.getElementById('imageViewerInfo');
+            if (imageViewer) {
+                imageViewer.innerHTML = '<div class="image-viewer-placeholder">Select an image from the gallery or generate a new one</div>';
+            }
+            if (imageViewerInfo) {
+                imageViewerInfo.style.display = 'none';
+            }
+            currentImageId = null;
+        }
+    }
+
+    // Delete the image
+    await deleteImage(imageId, null);
 }
 
 // Refresh queue display (debounced to prevent flashing)
@@ -172,10 +212,16 @@ function displayImageInViewer(imgElement) {
         currentGalleryIndex = Array.from(images).indexOf(imgElement);
         if (currentGalleryIndex === -1) currentGalleryIndex = 0;
 
+        // Store current image ID for deletion
+        const activeCard = imgElement.closest('.image-card');
+        if (activeCard) {
+            currentImageId = activeCard.id.replace('image-', '');
+            activeCard.classList.add('active');
+        }
+
         // Highlight the active image in gallery
         const cards = galleryImages.querySelectorAll('.image-card');
         cards.forEach(card => card.classList.remove('active'));
-        const activeCard = imgElement.closest('.image-card');
         if (activeCard) {
             activeCard.classList.add('active');
         }
@@ -338,6 +384,7 @@ function updateModalPrompts(prompt, originalPrompt) {
 
 // Track current gallery image index for keyboard navigation
 let currentGalleryIndex = 0;
+let currentImageId = null;
 
 // Navigate to previous gallery image
 function navigatePrevGalleryImage() {
@@ -416,6 +463,12 @@ document.addEventListener('keydown', function(event) {
     } else if (event.key === 'ArrowRight') {
         event.preventDefault();
         navigateNextGalleryImage();
+    }
+
+    // Delete current image
+    else if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault();
+        deleteCurrentImage();
     }
 });
 
