@@ -130,8 +130,59 @@
 
         .gallery-sidebar h3 {
             margin-top: 0;
-            margin-bottom: 1rem;
+            margin-bottom: 0.75rem;
             font-size: 1.1rem;
+        }
+
+        .gallery-controls {
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--pico-muted-border-color);
+        }
+
+        .gallery-control {
+            margin-bottom: 0.75rem;
+        }
+
+        .gallery-control:last-child {
+            margin-bottom: 0;
+        }
+
+        .gallery-control label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .gallery-control label span {
+            flex: 1;
+        }
+
+        .gallery-control input[type="range"] {
+            width: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        .gallery-control input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+        }
+
+        .thumbnail-size-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .thumbnail-size-value {
+            color: var(--pico-muted-color);
+            font-size: 0.75rem;
         }
 
         .gallery-sidebar .image-grid {
@@ -633,6 +684,21 @@
             </div>
             <aside class="gallery-sidebar">
                 <h3>Gallery</h3>
+                <div class="gallery-controls">
+                    <div class="gallery-control">
+                        <div class="thumbnail-size-label">
+                            <span>Thumbnail Size</span>
+                            <span class="thumbnail-size-value" id="thumbnailSizeValue">180px</span>
+                        </div>
+                        <input type="range" id="thumbnailSize" min="120" max="300" value="180" step="20">
+                    </div>
+                    <div class="gallery-control">
+                        <label>
+                            <input type="checkbox" id="autoShowNew" checked>
+                            <span>Auto-show new images</span>
+                        </label>
+                    </div>
+                </div>
                 <div id="galleryImages" class="image-grid">
                     {% include "partials/recent_images.html" %}
                 </div>

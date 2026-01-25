@@ -166,6 +166,11 @@ async function refreshRecentImages() {
 
             const images = galleryImages.querySelectorAll('.image-card img');
 
+            // Apply thumbnail size preference to newly loaded images
+            images.forEach(img => {
+                img.style.height = `${galleryPreferences.thumbnailSize}px`;
+            });
+
             // Auto-display the first (most recent) image in viewer if viewer is empty
             const imageViewer = document.getElementById('imageViewer');
             if (imageViewer && imageViewer.querySelector('.image-viewer-placeholder')) {
@@ -189,6 +194,12 @@ async function refreshRecentImages() {
 // Track current image index and list for navigation
 let currentImageIndex = -1;
 let currentImageList = [];
+
+// Gallery preferences
+let galleryPreferences = {
+    thumbnailSize: 180,
+    autoShowNew: true
+};
 
 // Display image in center viewer
 function displayImageInViewer(imgElement) {
@@ -542,16 +553,18 @@ function setupSSE() {
         refreshQueue();
         refreshQueueSummary();
 
-        // Refresh gallery and update viewer with new image
+        // Refresh gallery and update viewer with new image if auto-show is enabled
         setTimeout(async function() {
             await refreshRecentImages();
 
-            // Display the newly generated image in the viewer
-            const galleryImages = document.getElementById('galleryImages');
-            if (galleryImages) {
-                const firstImage = galleryImages.querySelector('.image-card img');
-                if (firstImage) {
-                    displayImageInViewer(firstImage);
+            // Display the newly generated image in the viewer only if auto-show is enabled
+            if (galleryPreferences.autoShowNew) {
+                const galleryImages = document.getElementById('galleryImages');
+                if (galleryImages) {
+                    const firstImage = galleryImages.querySelector('.image-card img');
+                    if (firstImage) {
+                        displayImageInViewer(firstImage);
+                    }
                 }
             }
         }, 100);
@@ -668,14 +681,86 @@ function updateJobProgress(jobId, progress, status) {
     }
 }
 
+// Load gallery preferences from localStorage
+function loadGalleryPreferences() {
+    const saved = localStorage.getItem('galleryPreferences');
+    if (saved) {
+        try {
+            galleryPreferences = { ...galleryPreferences, ...JSON.parse(saved) };
+        } catch (e) {
+            console.error('Failed to load gallery preferences:', e);
+        }
+    }
+}
+
+// Save gallery preferences to localStorage
+function saveGalleryPreferences() {
+    try {
+        localStorage.setItem('galleryPreferences', JSON.stringify(galleryPreferences));
+    } catch (e) {
+        console.error('Failed to save gallery preferences:', e);
+    }
+}
+
+// Update thumbnail size
+function updateThumbnailSize(size) {
+    galleryPreferences.thumbnailSize = size;
+    saveGalleryPreferences();
+
+    // Update CSS custom property
+    const galleryImages = document.getElementById('galleryImages');
+    if (galleryImages) {
+        const images = galleryImages.querySelectorAll('.image-card img');
+        images.forEach(img => {
+            img.style.height = `${size}px`;
+        });
+    }
+
+    // Update label
+    const sizeValue = document.getElementById('thumbnailSizeValue');
+    if (sizeValue) {
+        sizeValue.textContent = `${size}px`;
+    }
+}
+
+// Initialize gallery controls
+function initGalleryControls() {
+    const thumbnailSize = document.getElementById('thumbnailSize');
+    const autoShowNew = document.getElementById('autoShowNew');
+
+    if (thumbnailSize) {
+        thumbnailSize.value = galleryPreferences.thumbnailSize;
+        updateThumbnailSize(galleryPreferences.thumbnailSize);
+
+        thumbnailSize.addEventListener('input', function(e) {
+            updateThumbnailSize(parseInt(e.target.value, 10));
+        });
+    }
+
+    if (autoShowNew) {
+        autoShowNew.checked = galleryPreferences.autoShowNew;
+
+        autoShowNew.addEventListener('change', function(e) {
+            galleryPreferences.autoShowNew = e.target.checked;
+            saveGalleryPreferences();
+        });
+    }
+}
+
 // Initialize SSE on all pages for queue summary updates
 setupSSE();
 
 // Initialize queue summary on page load
 refreshQueueSummary();
 
+// Load preferences
+loadGalleryPreferences();
+
 // Initialize image viewer with most recent image on page load
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize gallery controls
+    initGalleryControls();
+
     const galleryImages = document.getElementById('galleryImages');
     const imageViewer = document.getElementById('imageViewer');
 
