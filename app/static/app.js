@@ -86,10 +86,6 @@ async function deleteImage(imageId, event) {
 async function deleteCurrentImage() {
     if (!currentImageId) return;
 
-    if (!confirm('Are you sure you want to delete this image?')) {
-        return;
-    }
-
     const imageId = currentImageId;
 
     // Navigate to next image before deleting
