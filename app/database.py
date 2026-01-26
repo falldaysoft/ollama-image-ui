@@ -89,13 +89,18 @@ async def create_image(id: str, filename: str, prompt: str, model: str, original
         return dict(row)
 
 
-async def get_images(limit: int = 50, offset: int = 0) -> list[dict]:
+async def get_images(limit: int | None = 50, offset: int = 0) -> list[dict]:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
-        cursor = await db.execute(
-            "SELECT * FROM images ORDER BY created_at DESC LIMIT ? OFFSET ?",
-            (limit, offset)
-        )
+        if limit is None:
+            cursor = await db.execute(
+                "SELECT * FROM images ORDER BY created_at DESC"
+            )
+        else:
+            cursor = await db.execute(
+                "SELECT * FROM images ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (limit, offset)
+            )
         rows = await cursor.fetchall()
 
         # Filter out images whose files no longer exist and clean up orphaned records

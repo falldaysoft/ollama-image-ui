@@ -40,7 +40,7 @@ templates = Jinja2Templates(directory=TEMPLATES_DIR)
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     """Main generation page."""
-    images = await db.get_images(limit=20)
+    images = await db.get_images(limit=None)
     queue_status = await queue_manager.get_queue_status()
     return templates.TemplateResponse(
         "index.html",
@@ -69,7 +69,7 @@ async def gallery(request: Request):
 @app.get("/queue", response_class=HTMLResponse)
 async def queue_page(request: Request):
     """Queue management page."""
-    images = await db.get_images(limit=20)
+    images = await db.get_images(limit=None)
     queue_status = await queue_manager.get_queue_status()
     return templates.TemplateResponse(
         "queue.html",
@@ -184,7 +184,7 @@ async def queue_partial(request: Request):
 @app.get("/partials/recent-images", response_class=HTMLResponse)
 async def recent_images_partial(request: Request):
     """Return recent images HTML partial for htmx updates."""
-    images = await db.get_images(limit=20)
+    images = await db.get_images(limit=None)
     return templates.TemplateResponse(
         "partials/recent_images.html",
         {"request": request, "images": images}
