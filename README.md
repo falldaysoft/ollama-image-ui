@@ -48,6 +48,16 @@ That's it! You should see the image generation interface.
 4. Watch the progress bar as your image is created
 5. View your generated images in the gallery below
 
+## Vary Prompt Feature
+
+The **Vary Prompt** dropdown lets you automatically enhance your prompts using a local AI model ([PromptBridge](https://huggingface.co/retowyss/PromptBridge-0.6b-Alpha)):
+
+- **None**: Use your prompt as-is
+- **Expand**: Enriches simple prompts with more descriptive details (e.g., "cat" → "a fluffy orange tabby cat with bright green eyes, sitting upright with an alert expression")
+- **Expand + Sentence**: Expands the prompt then condenses it into a single flowing sentence
+
+The model downloads automatically on first use (~1.2GB). When generating with "All Models", the prompt is varied once and reused for consistency across all models.
+
 ## Adding More Models
 
 To use different Ollama models, edit the `AVAILABLE_MODELS` list in `app/config.py` and restart the server.
