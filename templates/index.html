@@ -11,6 +11,7 @@
         <label for="model">
             Model
             <select id="model" name="model">
+                <option value="__all__">All Models</option>
                 {% for model in models %}
                 <option value="{{ model.id }}">{{ model.name }}</option>
                 {% endfor %}

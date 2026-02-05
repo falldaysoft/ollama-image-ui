@@ -5,6 +5,9 @@
              alt="{{ image.original_prompt or image.prompt }}"
              data-prompt="{{ image.prompt | e }}"
              data-original-prompt="{{ image.original_prompt | e if image.original_prompt else '' }}"
+             data-model="{{ image.model | e }}"
+             data-width="{{ image.width if image.width else '' }}"
+             data-height="{{ image.height if image.height else '' }}"
              onclick="openModalFromElement(this)"
              loading="lazy">
     </div>

@@ -11,6 +11,8 @@ from sse_starlette.sse import EventSourceResponse
 from . import database as db
 from .config import AVAILABLE_MODELS, IMAGES_DIR, STATIC_DIR, TEMPLATES_DIR
 from .models import GenerateRequest
+from .ollama import validate_ollama
+from .prompt_bridge import vary_prompt
 from .queue_manager import queue_manager
 
 
@@ -18,12 +20,50 @@ from .queue_manager import queue_manager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
     # Startup
+    print("=" * 80)
+    print("Starting Ollama Image Generator UI...")
+    print("=" * 80)
+
+    # Validate Ollama installation
+    print("\n[Validation] Checking Ollama installation...")
+    validation = await validate_ollama()
+
+    if validation.success:
+        print(f"[Validation] ✓ {validation.message}")
+        if validation.image_models_found:
+            print(f"[Validation] ✓ Image models available:")
+            for model in validation.image_models_found:
+                print(f"              - {model}")
+    else:
+        print(f"[Validation] ✗ {validation.message}")
+        if validation.models_found:
+            print(f"[Validation]   Non-image models found: {', '.join(validation.models_found[:5])}")
+        print("\n[WARNING] The application will start but image generation may not work.")
+        print("[WARNING] Please ensure Ollama is installed and has image generation models.")
+        print("[WARNING] Install models with: ollama pull <model-name>\n")
+
+    print("\n[Database] Initializing database...")
     await db.init_db()
+    print("[Database] ✓ Database initialized")
+
+    print("[Storage] Creating images directory...")
     IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    print(f"[Storage] ✓ Images directory: {IMAGES_DIR}")
+
+    print("[Queue] Starting job queue manager...")
     await queue_manager.start()
+    print("[Queue] ✓ Queue manager started")
+
+    print("\n" + "=" * 80)
+    print("Server ready!")
+    print("=" * 80 + "\n")
+
     yield
+
     # Shutdown
+    print("\n[Shutdown] Stopping queue manager...")
     await queue_manager.stop()
+    print("[Shutdown] ✓ Queue manager stopped")
 
 
 app = FastAPI(title="Ollama Image Generator", lifespan=lifespan)
@@ -92,16 +132,51 @@ async def generate(request: GenerateRequest):
     # Clamp count to reasonable range
     count = max(1, min(request.count, 100))
 
+    # Handle "All Models" selection
+    models_to_use = []
+    if request.model == "__all__":
+        models_to_use = [model["id"] for model in AVAILABLE_MODELS]
+    else:
+        models_to_use = [request.model]
+
+    # If using "All Models" with prompt variation, vary the prompt once upfront
+    # so all models use the same variation
+    shared_varied_prompt = None
+    vary_mode_for_jobs = request.vary_mode
+    if request.model == "__all__" and request.vary_mode:
+        try:
+            shared_varied_prompt = await vary_prompt(request.prompt.strip(), mode=request.vary_mode)
+            # Don't vary again in individual jobs
+            vary_mode_for_jobs = None
+        except Exception as e:
+            print(f"[DEBUG] Failed to vary prompt for all models: {e}")
+            # Fall back to varying in each job
+            shared_varied_prompt = None
+            vary_mode_for_jobs = request.vary_mode
+
     jobs = []
     for _ in range(count):
-        job = await queue_manager.add_job(
-            request.prompt.strip(),
-            request.model,
-            vary_mode=request.vary_mode,
-            width=request.width,
-            height=request.height
-        )
-        jobs.append({"job_id": job.id, "status": job.status})
+        for model in models_to_use:
+            # If we have a shared varied prompt, use it as the prompt
+            # and pass the original as the "varied_prompt" metadata
+            if shared_varied_prompt:
+                job = await queue_manager.add_job(
+                    request.prompt.strip(),
+                    model,
+                    vary_mode=None,  # Don't vary again
+                    width=request.width,
+                    height=request.height,
+                    pre_varied_prompt=shared_varied_prompt
+                )
+            else:
+                job = await queue_manager.add_job(
+                    request.prompt.strip(),
+                    model,
+                    vary_mode=vary_mode_for_jobs,
+                    width=request.width,
+                    height=request.height
+                )
+            jobs.append({"job_id": job.id, "status": job.status})
 
     if len(jobs) == 1:
         return jobs[0]
@@ -121,15 +196,22 @@ async def queue_stream():
 
 
 @app.delete("/api/queue/{job_id}")
-async def cancel_job(job_id: str):
-    """Cancel a pending job."""
-    success = await queue_manager.cancel_job(job_id)
+async def cancel_job(job_id: str, force: bool = False):
+    """Cancel a job. Use ?force=true to cancel processing jobs."""
+    success = await queue_manager.cancel_job(job_id, force=force)
     if not success:
         raise HTTPException(
             status_code=400,
             detail="Job not found or cannot be cancelled"
         )
     return {"status": "cancelled"}
+
+
+@app.post("/api/queue/cancel-all")
+async def cancel_all_jobs():
+    """Cancel all pending jobs."""
+    cancelled_count = await queue_manager.cancel_all_jobs()
+    return {"status": "cancelled", "count": cancelled_count}
 
 
 @app.get("/api/images")

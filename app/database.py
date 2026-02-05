@@ -139,13 +139,13 @@ async def delete_image(id: str) -> bool:
 
 
 # Job operations
-async def create_job(id: str, prompt: str, model: str, vary_mode: Optional[str] = None, width: Optional[int] = None, height: Optional[int] = None) -> dict:
+async def create_job(id: str, prompt: str, model: str, vary_mode: Optional[str] = None, width: Optional[int] = None, height: Optional[int] = None, varied_prompt: Optional[str] = None) -> dict:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         now = datetime.utcnow().isoformat()
         await db.execute(
-            "INSERT INTO jobs (id, prompt, model, status, created_at, vary_mode, width, height) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (id, prompt, model, "pending", now, vary_mode, width, height)
+            "INSERT INTO jobs (id, prompt, model, status, created_at, vary_mode, width, height, varied_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (id, prompt, model, "pending", now, vary_mode, width, height, varied_prompt)
         )
         await db.commit()
         cursor = await db.execute("SELECT * FROM jobs WHERE id = ?", (id,))

@@ -33,6 +33,7 @@ class QueueManager:
         self._subscribers: list[asyncio.Queue] = []
         self._processing: Optional[Job] = None
         self._task: Optional[asyncio.Task] = None
+        self._generation_task: Optional[asyncio.Task] = None  # Track current generation task for cancellation
 
     async def start(self):
         """Start the background queue processor."""
@@ -68,7 +69,7 @@ class QueueManager:
             except asyncio.CancelledError:
                 pass
 
-    async def add_job(self, prompt: str, model: str, vary_mode: Optional[str] = None, width: Optional[int] = None, height: Optional[int] = None) -> Job:
+    async def add_job(self, prompt: str, model: str, vary_mode: Optional[str] = None, width: Optional[int] = None, height: Optional[int] = None, pre_varied_prompt: Optional[str] = None) -> Job:
         """Add a new job to the queue."""
         job_id = str(uuid.uuid4())
         job = Job(
@@ -78,12 +79,13 @@ class QueueManager:
             status="pending",
             created_at=datetime.utcnow().isoformat(),
             vary_mode=vary_mode,
+            varied_prompt=pre_varied_prompt,  # Store pre-varied prompt if provided
             width=width,
             height=height
         )
 
-        # Save to database
-        await db.create_job(job_id, prompt, model, vary_mode=vary_mode, width=width, height=height)
+        # Save to database (with varied_prompt if already provided)
+        await db.create_job(job_id, prompt, model, vary_mode=vary_mode, width=width, height=height, varied_prompt=pre_varied_prompt)
 
         # Add to queue
         await self._queue.put(job)
@@ -96,18 +98,63 @@ class QueueManager:
 
         return job
 
-    async def cancel_job(self, job_id: str) -> bool:
-        """Cancel a pending job (cannot cancel processing jobs)."""
-        # We can't easily remove from asyncio.Queue, so we mark in DB
+    async def cancel_job(self, job_id: str, force: bool = False) -> bool:
+        """Cancel a job. Use force=True to cancel processing jobs."""
         job = await db.get_job(job_id)
-        if job and job["status"] == "pending":
+        if not job:
+            return False
+
+        if job["status"] == "pending":
             await db.update_job_status(job_id, "cancelled")
             await self._broadcast({
                 "event": "job_cancelled",
                 "job_id": job_id
             })
             return True
+        elif job["status"] == "processing" and force:
+            # Force cancel a processing job
+            await db.update_job_status(job_id, "cancelled", error="Cancelled by user")
+            await self._broadcast({
+                "event": "job_cancelled",
+                "job_id": job_id
+            })
+            # Cancel the running generation task if it exists
+            if self._generation_task and not self._generation_task.done():
+                self._generation_task.cancel()
+                print(f"[DEBUG] Cancelled generation task for job {job_id}")
+            return True
         return False
+
+    async def cancel_all_jobs(self) -> int:
+        """Cancel all jobs including processing jobs."""
+        pending_jobs = await db.get_jobs(status="pending")
+        processing_jobs = await db.get_jobs(status="processing")
+        cancelled_count = 0
+
+        # Cancel all pending jobs
+        for job in pending_jobs:
+            await db.update_job_status(job["id"], "cancelled")
+            await self._broadcast({
+                "event": "job_cancelled",
+                "job_id": job["id"]
+            })
+            cancelled_count += 1
+
+        # Force cancel any processing jobs
+        for job in processing_jobs:
+            await db.update_job_status(job["id"], "cancelled", error="Cancelled by user")
+            await self._broadcast({
+                "event": "job_cancelled",
+                "job_id": job["id"]
+            })
+            cancelled_count += 1
+
+        # Cancel the running generation task if it exists
+        if self._generation_task and not self._generation_task.done():
+            self._generation_task.cancel()
+            print(f"[DEBUG] Cancelled generation task via cancel_all")
+
+        return cancelled_count
 
     async def get_queue_status(self) -> dict:
         """Get current queue status."""
@@ -184,9 +231,13 @@ class QueueManager:
                     "job": self._job_to_dict(job)
                 })
 
-                # Apply prompt variation if requested
+                # Apply prompt variation if requested (unless already pre-varied)
                 prompt_for_generation = job.prompt
-                if job.vary_mode:
+                if job.varied_prompt:
+                    # Already varied (shared variation for "All Models")
+                    prompt_for_generation = job.varied_prompt
+                    print(f"[DEBUG] Using pre-varied prompt for job {job.id}: {job.varied_prompt[:100]}...")
+                elif job.vary_mode:
                     job.progress = 0
                     job.progress_status = "Varying prompt..."
                     await self._broadcast({
@@ -278,10 +329,40 @@ class QueueManager:
                 broadcast_task = asyncio.create_task(broadcast_progress())
                 print(f"[DEBUG] Started broadcast task for job {job.id}")
 
-                # Generate the image
+                # Generate the image with timeout (10 minutes max)
                 print(f"[DEBUG] Starting image generation for job {job.id}")
-                result = await generate_image(prompt_for_generation, job.model, on_progress, width=job.width, height=job.height)
-                print(f"[DEBUG] Image generation complete for job {job.id}, success={result.success}")
+                try:
+                    # Create task and track it for potential cancellation
+                    self._generation_task = asyncio.create_task(
+                        generate_image(prompt_for_generation, job.model, on_progress, width=job.width, height=job.height)
+                    )
+                    result = await asyncio.wait_for(
+                        self._generation_task,
+                        timeout=600.0  # 10 minute timeout
+                    )
+                    print(f"[DEBUG] Image generation complete for job {job.id}, success={result.success}")
+                except asyncio.CancelledError:
+                    print(f"[DEBUG] Image generation CANCELLED for job {job.id}")
+                    # Create a failed result for cancellation
+                    from .ollama import GenerationResult
+                    result = GenerationResult(
+                        success=False,
+                        error="Job cancelled by user",
+                        image_id=None,
+                        filename=None
+                    )
+                except asyncio.TimeoutError:
+                    print(f"[DEBUG] Image generation TIMED OUT for job {job.id}")
+                    # Create a failed result
+                    from .ollama import GenerationResult
+                    result = GenerationResult(
+                        success=False,
+                        error="Image generation timed out after 10 minutes",
+                        image_id=None,
+                        filename=None
+                    )
+                finally:
+                    self._generation_task = None
 
                 # Stop the broadcast task
                 broadcast_task.cancel()
@@ -289,6 +370,14 @@ class QueueManager:
                     await broadcast_task
                 except asyncio.CancelledError:
                     pass
+
+                # Check if job was cancelled during processing
+                db_job = await db.get_job(job.id)
+                if db_job and db_job["status"] == "cancelled":
+                    print(f"[DEBUG] Job {job.id} was cancelled during processing")
+                    self._processing = None
+                    self._queue.task_done()
+                    continue
 
                 if result.success:
                     # Save image to database

@@ -264,3 +264,113 @@ async def list_models() -> list[str]:
 
     except Exception:
         return []
+
+
+@dataclass
+class ValidationResult:
+    success: bool
+    message: str
+    models_found: list[str]
+    image_models_found: list[str]
+
+
+async def validate_ollama() -> ValidationResult:
+    """
+    Validate that Ollama is installed, accessible, and has image generation models.
+
+    Returns ValidationResult with:
+    - success: True if Ollama is working and has image models
+    - message: Human-readable status message
+    - models_found: List of all models found
+    - image_models_found: List of models that appear to be image generation models
+    """
+    try:
+        # Check if ollama command exists and can execute
+        process = await asyncio.create_subprocess_exec(
+            "ollama", "list",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+
+        stdout, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            error_msg = stderr.decode().strip() if stderr else "Unknown error"
+            return ValidationResult(
+                success=False,
+                message=f"Ollama command failed: {error_msg}",
+                models_found=[],
+                image_models_found=[]
+            )
+
+        # Parse output - skip header line
+        output = stdout.decode().strip()
+        if not output:
+            return ValidationResult(
+                success=False,
+                message="Ollama is installed but returned no output",
+                models_found=[],
+                image_models_found=[]
+            )
+
+        lines = output.split("\n")[1:]  # Skip header
+        models = []
+        for line in lines:
+            if line.strip():
+                # Extract model name (first column)
+                parts = line.split()
+                if parts:
+                    models.append(parts[0])
+
+        if not models:
+            return ValidationResult(
+                success=False,
+                message="Ollama is installed but no models are available. Please install image generation models using 'ollama pull <model>'",
+                models_found=[],
+                image_models_found=[]
+            )
+
+        # Identify image generation models
+        # Common patterns for image models: flux, stable-diffusion, sd, dall-e, imagen, midjourney, etc.
+        image_model_keywords = [
+            'flux', 'stable-diffusion', 'sd', 'dall-e', 'imagen',
+            'midjourney', 'lcm', 'sdxl', 'kandinsky', 'playground',
+            'image', 'img', 'vision', 'z-image', 'klein'
+        ]
+
+        image_models = []
+        for model in models:
+            model_lower = model.lower()
+            if any(keyword in model_lower for keyword in image_model_keywords):
+                image_models.append(model)
+
+        if not image_models:
+            return ValidationResult(
+                success=False,
+                message=f"Ollama has {len(models)} model(s) but none appear to be image generation models. Found: {', '.join(models[:3])}",
+                models_found=models,
+                image_models_found=[]
+            )
+
+        # Success!
+        return ValidationResult(
+            success=True,
+            message=f"Ollama is ready with {len(image_models)} image generation model(s): {', '.join(image_models[:5])}",
+            models_found=models,
+            image_models_found=image_models
+        )
+
+    except FileNotFoundError:
+        return ValidationResult(
+            success=False,
+            message="Ollama CLI not found. Please install Ollama from https://ollama.ai",
+            models_found=[],
+            image_models_found=[]
+        )
+    except Exception as e:
+        return ValidationResult(
+            success=False,
+            message=f"Unexpected error validating Ollama: {str(e)}",
+            models_found=[],
+            image_models_found=[]
+        )

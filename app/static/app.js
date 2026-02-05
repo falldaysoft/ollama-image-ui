@@ -55,6 +55,26 @@ async function cancelJob(jobId) {
     }
 }
 
+// Cancel all pending jobs
+async function cancelAllJobs() {
+    try {
+        const response = await fetch('/api/queue/cancel-all', {
+            method: 'POST'
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to cancel all jobs');
+        }
+
+        const result = await response.json();
+        console.log(`Cancelled ${result.count} job(s)`);
+        refreshQueue();
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
+
 // Delete an image
 async function deleteImage(imageId, event) {
     if (event) {
@@ -111,11 +131,92 @@ async function deleteCurrentImage() {
                 imageViewerInfo.style.display = 'none';
             }
             currentImageId = null;
+            currentImageMetadata = null;
         }
     }
 
     // Delete the image
     await deleteImage(imageId, null);
+}
+
+// Reuse prompt from current image
+function reusePrompt() {
+    if (!currentImageMetadata) return;
+
+    // Use original prompt if available, otherwise use the (possibly varied) prompt
+    const promptToUse = currentImageMetadata.originalPrompt || currentImageMetadata.prompt;
+
+    // Store in sessionStorage for cross-page access
+    sessionStorage.setItem('reusePrompt', promptToUse);
+
+    // If we're on the queue page, navigate to generate page
+    if (window.location.pathname === '/queue') {
+        window.location.href = '/';
+        return;
+    }
+
+    const promptField = document.getElementById('prompt');
+    if (promptField) {
+        promptField.value = promptToUse;
+        // Focus the prompt field and scroll to it
+        promptField.focus();
+        promptField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
+// Reuse all parameters from current image
+function reuseAll() {
+    if (!currentImageMetadata) return;
+
+    // Use original prompt if available, otherwise use the (possibly varied) prompt
+    const promptToUse = currentImageMetadata.originalPrompt || currentImageMetadata.prompt;
+
+    // Store all parameters in sessionStorage for cross-page access
+    sessionStorage.setItem('reuseAll', JSON.stringify({
+        prompt: promptToUse,
+        model: currentImageMetadata.model,
+        width: currentImageMetadata.width || '',
+        height: currentImageMetadata.height || ''
+    }));
+
+    // If we're on the queue page, navigate to generate page
+    if (window.location.pathname === '/queue') {
+        window.location.href = '/';
+        return;
+    }
+
+    const promptField = document.getElementById('prompt');
+    const modelField = document.getElementById('model');
+    const widthField = document.getElementById('width');
+    const heightField = document.getElementById('height');
+    const varyModeField = document.getElementById('varyMode');
+
+    if (promptField) {
+        promptField.value = promptToUse;
+    }
+
+    if (modelField && currentImageMetadata.model) {
+        modelField.value = currentImageMetadata.model;
+    }
+
+    if (widthField) {
+        widthField.value = currentImageMetadata.width || '';
+    }
+
+    if (heightField) {
+        heightField.value = currentImageMetadata.height || '';
+    }
+
+    // Reset vary mode to None since we're reusing an already-generated image
+    if (varyModeField) {
+        varyModeField.value = '';
+    }
+
+    // Focus the prompt field and scroll to it
+    if (promptField) {
+        promptField.focus();
+        promptField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
 }
 
 // Refresh queue display (debounced to prevent flashing)
@@ -214,6 +315,18 @@ function displayImageInViewer(imgElement) {
     const imageSrc = imgElement.src;
     const prompt = imgElement.dataset.prompt || '';
     const originalPrompt = imgElement.dataset.originalPrompt || '';
+    const model = imgElement.dataset.model || '';
+    const width = imgElement.dataset.width || '';
+    const height = imgElement.dataset.height || '';
+
+    // Store current image metadata for reuse buttons
+    currentImageMetadata = {
+        prompt: prompt,
+        originalPrompt: originalPrompt,
+        model: model,
+        width: width,
+        height: height
+    };
 
     // Update current gallery index to match this image
     const galleryImages = document.getElementById('galleryImages');
@@ -395,6 +508,7 @@ function updateModalPrompts(prompt, originalPrompt) {
 // Track current gallery image index for keyboard navigation
 let currentGalleryIndex = 0;
 let currentImageId = null;
+let currentImageMetadata = null;
 
 // Navigate to previous gallery image
 function navigatePrevGalleryImage() {
@@ -513,7 +627,7 @@ function setupSSE() {
         console.log('[SSE] status event received:', e.data);
         const data = JSON.parse(e.data);
         updateQueueSummary(data);
-        updateQueueFromData(data);
+        refreshQueue();
     });
 
     eventSource.addEventListener('job_added', function(e) {
@@ -612,56 +726,6 @@ async function refreshQueueSummary() {
     }
 }
 
-// Update queue from SSE data
-function updateQueueFromData(data) {
-    const queueList = document.getElementById('queueList');
-    if (!queueList) return;
-
-    if (!data.jobs || data.jobs.length === 0) {
-        queueList.innerHTML = '<p class="empty-state">No jobs in queue</p>';
-        return;
-    }
-
-    let html = '';
-    for (const job of data.jobs) {
-        const processingClass = job.status === 'processing' ? 'processing-indicator' : '';
-        const cancelBtn = job.status === 'pending'
-            ? `<button class="secondary outline" style="margin-left: 0.5rem; padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="cancelJob('${job.id}')">Cancel</button>`
-            : '';
-
-        const progressSection = job.status === 'processing'
-            ? `<div class="progress-container">
-                   <div class="progress-bar" id="progress-bar-${job.id}" style="width: ${job.progress || 0}%"></div>
-               </div>
-               <div class="progress-status" id="progress-status-${job.id}">${escapeHtml(job.progress_status || 'Starting...')}</div>`
-            : '';
-
-        const varyLabels = { 'expand': 'expand', 'expand_concise': 'sentence', 'expand_keywords': 'keywords' };
-        const varyBadge = job.vary_mode
-            ? `<span class="vary-badge" title="Prompt will be varied">${varyLabels[job.vary_mode] || 'vary'}</span>`
-            : '';
-
-        const variedPromptSection = job.varied_prompt
-            ? `<div class="varied-prompt" title="${escapeHtml(job.varied_prompt)}">
-                   <small><strong>Varied:</strong> ${escapeHtml(job.varied_prompt)}</small>
-               </div>`
-            : '';
-
-        html += `
-            <div class="queue-item" id="job-${job.id}">
-                <div class="queue-item-header">
-                    <span class="prompt" title="${escapeHtml(job.prompt)}">${escapeHtml(job.prompt)}</span>
-                    ${varyBadge}
-                    <span class="status status-${job.status} ${processingClass}">${job.status}</span>
-                    ${cancelBtn}
-                </div>
-                ${variedPromptSection}
-                ${progressSection}
-            </div>
-        `;
-    }
-    queueList.innerHTML = html;
-}
 
 // Escape HTML for safe display
 function escapeHtml(text) {
@@ -828,5 +892,61 @@ document.addEventListener('DOMContentLoaded', function() {
         if (firstImage) {
             displayImageInViewer(firstImage);
         }
+    }
+
+    // Restore reused parameters from sessionStorage if present
+    const reuseAllData = sessionStorage.getItem('reuseAll');
+    const reusePromptData = sessionStorage.getItem('reusePrompt');
+
+    if (reuseAllData) {
+        try {
+            const data = JSON.parse(reuseAllData);
+            const promptField = document.getElementById('prompt');
+            const modelField = document.getElementById('model');
+            const widthField = document.getElementById('width');
+            const heightField = document.getElementById('height');
+            const varyModeField = document.getElementById('varyMode');
+
+            if (promptField && data.prompt) {
+                promptField.value = data.prompt;
+            }
+
+            if (modelField && data.model) {
+                modelField.value = data.model;
+            }
+
+            if (widthField) {
+                widthField.value = data.width || '';
+            }
+
+            if (heightField) {
+                heightField.value = data.height || '';
+            }
+
+            // Reset vary mode to None since we're reusing an already-generated image
+            if (varyModeField) {
+                varyModeField.value = '';
+            }
+
+            // Focus the prompt field and scroll to it
+            if (promptField) {
+                promptField.focus();
+                promptField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+
+            // Clear the stored data
+            sessionStorage.removeItem('reuseAll');
+        } catch (e) {
+            console.error('Failed to restore reuse data:', e);
+        }
+    } else if (reusePromptData) {
+        const promptField = document.getElementById('prompt');
+        if (promptField) {
+            promptField.value = reusePromptData;
+            promptField.focus();
+            promptField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        // Clear the stored data
+        sessionStorage.removeItem('reusePrompt');
     }
 });

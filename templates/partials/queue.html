@@ -1,4 +1,7 @@
 {% if queue.jobs %}
+    <div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">
+        <button class="secondary outline" style="padding: 0.25rem 0.75rem; font-size: 0.875rem;" onclick="cancelAllJobs()">Cancel All</button>
+    </div>
     {% for job in queue.jobs %}
     <div class="queue-item" id="job-{{ job.id }}">
         <div class="queue-item-header">
