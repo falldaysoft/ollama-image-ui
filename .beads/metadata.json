@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "ollama_image_ui",
+  "project_id": "e58e91c9-2b23-4389-b57f-766e83134840"
+}
