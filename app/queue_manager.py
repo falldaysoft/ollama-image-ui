@@ -6,6 +6,8 @@ from typing import AsyncGenerator, Optional
 from datetime import datetime
 
 from . import database as db
+from . import qwen
+from .config import UPLOADS_DIR, model_backend
 from .ollama import generate_image, ProgressUpdate
 from .prompt_bridge import vary_prompt as apply_prompt_variation
 
@@ -25,6 +27,9 @@ class Job:
     varied_prompt: Optional[str] = None
     width: Optional[int] = None
     height: Optional[int] = None
+    reference_image: Optional[str] = None  # Filename in uploads/; makes a Qwen job an edit
+    seed: Optional[int] = None
+    steps: Optional[int] = None
 
 
 class QueueManager:
@@ -54,7 +59,10 @@ class QueueManager:
                 vary_mode=job_data.get("vary_mode"),
                 varied_prompt=job_data.get("varied_prompt"),
                 width=job_data.get("width"),
-                height=job_data.get("height")
+                height=job_data.get("height"),
+                reference_image=job_data.get("reference_image"),
+                seed=job_data.get("seed"),
+                steps=job_data.get("steps")
             )
             await self._queue.put(job)
 
@@ -69,9 +77,15 @@ class QueueManager:
             except asyncio.CancelledError:
                 pass
 
-    async def add_job(self, prompt: str, model: str, vary_mode: Optional[str] = None, width: Optional[int] = None, height: Optional[int] = None, pre_varied_prompt: Optional[str] = None) -> Job:
+    async def add_job(self, prompt: str, model: str, vary_mode: Optional[str] = None, width: Optional[int] = None, height: Optional[int] = None, pre_varied_prompt: Optional[str] = None, reference_image: Optional[str] = None, seed: Optional[int] = None, steps: Optional[int] = None) -> Job:
         """Add a new job to the queue."""
         job_id = str(uuid.uuid4())
+        if model_backend(model) == "qwen":
+            # Pick the seed now so it's visible in the queue and reproducible
+            seed = qwen.random_seed() if seed is None else seed
+            steps = qwen.clamp_steps(steps)
+        else:
+            reference_image, seed, steps = None, None, None
         job = Job(
             id=job_id,
             prompt=prompt,
@@ -81,11 +95,14 @@ class QueueManager:
             vary_mode=vary_mode,
             varied_prompt=pre_varied_prompt,  # Store pre-varied prompt if provided
             width=width,
-            height=height
+            height=height,
+            reference_image=reference_image,
+            seed=seed,
+            steps=steps
         )
 
         # Save to database (with varied_prompt if already provided)
-        await db.create_job(job_id, prompt, model, vary_mode=vary_mode, width=width, height=height, varied_prompt=pre_varied_prompt)
+        await db.create_job(job_id, prompt, model, vary_mode=vary_mode, width=width, height=height, varied_prompt=pre_varied_prompt, reference_image=reference_image, seed=seed, steps=steps)
 
         # Add to queue
         await self._queue.put(job)
@@ -333,9 +350,19 @@ class QueueManager:
                 print(f"[DEBUG] Starting image generation for job {job.id}")
                 try:
                     # Create task and track it for potential cancellation
-                    self._generation_task = asyncio.create_task(
-                        generate_image(prompt_for_generation, job.model, on_progress, width=job.width, height=job.height)
-                    )
+                    if model_backend(job.model) == "qwen":
+                        generation = qwen.generate_image(
+                            prompt_for_generation,
+                            on_progress,
+                            width=job.width,
+                            height=job.height,
+                            reference=UPLOADS_DIR / job.reference_image if job.reference_image else None,
+                            seed=job.seed,
+                            steps=job.steps
+                        )
+                    else:
+                        generation = generate_image(prompt_for_generation, job.model, on_progress, width=job.width, height=job.height)
+                    self._generation_task = asyncio.create_task(generation)
                     result = await asyncio.wait_for(
                         self._generation_task,
                         timeout=600.0  # 10 minute timeout
@@ -391,8 +418,11 @@ class QueueManager:
                         image_prompt,
                         job.model,
                         original_prompt=original_prompt,
-                        width=job.width,
-                        height=job.height
+                        width=result.width or job.width,
+                        height=result.height or job.height,
+                        reference_image=job.reference_image,
+                        seed=result.seed if result.seed is not None else job.seed,
+                        steps=job.steps
                     )
 
                     # Update job status
@@ -408,7 +438,8 @@ class QueueManager:
                             "filename": result.filename,
                             "prompt": image_prompt,
                             "original_prompt": original_prompt,
-                            "model": job.model
+                            "model": job.model,
+                            "reference_image": job.reference_image
                         }
                     })
                 else:
@@ -452,7 +483,10 @@ class QueueManager:
             "vary_mode": job.vary_mode,
             "varied_prompt": job.varied_prompt,
             "width": job.width,
-            "height": job.height
+            "height": job.height,
+            "reference_image": job.reference_image,
+            "seed": job.seed,
+            "steps": job.steps
         }
 
 

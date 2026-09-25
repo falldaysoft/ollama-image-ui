@@ -9,6 +9,8 @@ async function submitGeneration(event) {
     const count = parseInt(document.getElementById('count')?.value, 10) || 1;
     const width = form.width?.value ? parseInt(form.width.value, 10) : null;
     const height = form.height?.value ? parseInt(form.height.value, 10) : null;
+    const seed = form.seed?.value !== '' && form.seed?.value != null ? parseInt(form.seed.value, 10) : null;
+    const steps = form.steps?.value ? parseInt(form.steps.value, 10) : null;
     const btn = form.querySelector('button[type="submit"]');
 
     if (!prompt) return;
@@ -20,7 +22,10 @@ async function submitGeneration(event) {
         const response = await fetch('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt, model, vary_mode: varyMode || null, count, width, height })
+            body: JSON.stringify({
+                prompt, model, vary_mode: varyMode || null, count, width, height, seed, steps,
+                reference_image: referenceImage?.filename || null
+            })
         });
 
         if (!response.ok) {
@@ -158,6 +163,7 @@ function reusePrompt() {
     const promptField = document.getElementById('prompt');
     if (promptField) {
         promptField.value = promptToUse;
+        saveFormState();
         // Focus the prompt field and scroll to it
         promptField.focus();
         promptField.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -169,42 +175,65 @@ function reuseAll() {
     if (!currentImageMetadata) return;
 
     // Use original prompt if available, otherwise use the (possibly varied) prompt
-    const promptToUse = currentImageMetadata.originalPrompt || currentImageMetadata.prompt;
-
-    // Store all parameters in sessionStorage for cross-page access
-    sessionStorage.setItem('reuseAll', JSON.stringify({
-        prompt: promptToUse,
+    const params = {
+        prompt: currentImageMetadata.originalPrompt || currentImageMetadata.prompt,
         model: currentImageMetadata.model,
         width: currentImageMetadata.width || '',
-        height: currentImageMetadata.height || ''
-    }));
+        height: currentImageMetadata.height || '',
+        seed: currentImageMetadata.seed,
+        steps: currentImageMetadata.steps,
+        reference: currentImageMetadata.reference
+    };
 
-    // If we're on the queue page, navigate to generate page
-    if (window.location.pathname === '/queue') {
+    // If we're not on the generate page, hand the parameters over via sessionStorage
+    if (!document.getElementById('generateForm')) {
+        sessionStorage.setItem('reuseAll', JSON.stringify(params));
         window.location.href = '/';
         return;
     }
 
+    applyFormParams(params);
+}
+
+// Fill the generation form with previously used parameters
+function applyFormParams(data) {
     const promptField = document.getElementById('prompt');
     const modelField = document.getElementById('model');
     const widthField = document.getElementById('width');
     const heightField = document.getElementById('height');
     const varyModeField = document.getElementById('varyMode');
+    const seedField = document.getElementById('seed');
+    const stepsField = document.getElementById('steps');
 
-    if (promptField) {
-        promptField.value = promptToUse;
+    if (promptField && data.prompt) {
+        promptField.value = data.prompt;
     }
 
-    if (modelField && currentImageMetadata.model) {
-        modelField.value = currentImageMetadata.model;
+    // Set the reference first: it decides which models are selectable
+    if (data.reference) {
+        setReference({ filename: data.reference, url: `/uploads/${data.reference}` });
+    } else {
+        clearReference();
+    }
+
+    if (modelField && data.model) {
+        modelField.value = data.model;
     }
 
     if (widthField) {
-        widthField.value = currentImageMetadata.width || '';
+        widthField.value = data.width || '';
     }
 
     if (heightField) {
-        heightField.value = currentImageMetadata.height || '';
+        heightField.value = data.height || '';
+    }
+
+    if (seedField) {
+        seedField.value = data.seed ?? '';
+    }
+
+    if (stepsField && data.steps) {
+        stepsField.value = data.steps;
     }
 
     // Reset vary mode to None since we're reusing an already-generated image
@@ -212,11 +241,235 @@ function reuseAll() {
         varyModeField.value = '';
     }
 
+    updateModelOptions();
+    saveFormState();
+
     // Focus the prompt field and scroll to it
     if (promptField) {
         promptField.focus();
         promptField.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
+}
+
+// ============ Reference image (edits) ============
+
+// Currently attached reference: { filename, url } or null
+let referenceImage = null;
+
+function setReference(ref) {
+    referenceImage = ref;
+    const preview = document.getElementById('referencePreview');
+    const previewWrap = document.getElementById('referencePreviewWrap');
+    const empty = document.getElementById('referenceEmpty');
+    const hint = document.getElementById('editHint');
+    if (preview) preview.src = ref.url;
+    if (previewWrap) previewWrap.hidden = false;
+    if (empty) empty.hidden = true;
+    if (hint) hint.hidden = false;
+    updateModelOptions();
+    saveFormState();
+}
+
+function clearReference(event) {
+    if (event) {
+        event.stopPropagation();
+    }
+    referenceImage = null;
+    const preview = document.getElementById('referencePreview');
+    const previewWrap = document.getElementById('referencePreviewWrap');
+    const empty = document.getElementById('referenceEmpty');
+    const hint = document.getElementById('editHint');
+    const fileInput = document.getElementById('referenceFile');
+    if (preview) preview.removeAttribute('src');
+    if (previewWrap) previewWrap.hidden = true;
+    if (empty) empty.hidden = false;
+    if (hint) hint.hidden = true;
+    if (fileInput) fileInput.value = '';
+    updateModelOptions();
+    saveFormState();
+}
+
+async function uploadReference(file) {
+    if (!file || !file.type.startsWith('image/')) {
+        alert('Please choose an image file');
+        return;
+    }
+
+    const drop = document.getElementById('referenceDrop');
+    drop?.setAttribute('aria-busy', 'true');
+
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await fetch('/api/references', { method: 'POST', body: formData });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to upload image');
+        }
+        setReference(await response.json());
+    } catch (error) {
+        alert('Error: ' + error.message);
+    } finally {
+        drop?.removeAttribute('aria-busy');
+    }
+}
+
+// Use the image in the viewer as the reference for an edit
+async function useCurrentAsReference() {
+    if (!currentImageId) return;
+
+    try {
+        const response = await fetch(`/api/references/from-image/${currentImageId}`, { method: 'POST' });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to use image as reference');
+        }
+        const ref = await response.json();
+
+        // If we're not on the generate page, hand it over via sessionStorage
+        if (!document.getElementById('generateForm')) {
+            sessionStorage.setItem('reuseReference', JSON.stringify(ref));
+            window.location.href = '/';
+            return;
+        }
+
+        setReference(ref);
+        const promptField = document.getElementById('prompt');
+        if (promptField) {
+            promptField.focus();
+            promptField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
+
+// Only some models accept a reference image; the Qwen-only options hide for Ollama models
+function updateModelOptions() {
+    const modelField = document.getElementById('model');
+    if (!modelField) return;
+
+    const editing = referenceImage !== null;
+    let selectedDisabled = false;
+    for (const option of modelField.options) {
+        if (option.value === '__all__') continue;
+        option.disabled = editing && option.dataset.backend !== 'qwen';
+        if (option.selected && option.disabled) selectedDisabled = true;
+    }
+    if (selectedDisabled) {
+        const qwenOption = Array.from(modelField.options).find(o => o.dataset.backend === 'qwen');
+        if (qwenOption) modelField.value = qwenOption.value;
+    }
+
+    const selected = modelField.options[modelField.selectedIndex];
+    const usesQwen = modelField.value === '__all__' || selected?.dataset.backend === 'qwen';
+    const qwenOptions = document.getElementById('qwenOptions');
+    if (qwenOptions) qwenOptions.style.display = usesQwen ? 'flex' : 'none';
+
+    const btn = document.getElementById('generateBtn');
+    if (btn) btn.textContent = editing ? 'Edit Image' : 'Generate';
+
+    const promptField = document.getElementById('prompt');
+    if (promptField) {
+        promptField.placeholder = editing
+            ? 'Describe the edit: what to change, and what to keep...'
+            : 'Describe the image you want to generate...';
+    }
+}
+
+function initReferenceInput() {
+    const drop = document.getElementById('referenceDrop');
+    const fileInput = document.getElementById('referenceFile');
+    const modelField = document.getElementById('model');
+    if (!drop || !fileInput) return;
+
+    drop.addEventListener('click', () => fileInput.click());
+    drop.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            fileInput.click();
+        }
+    });
+    fileInput.addEventListener('change', () => {
+        if (fileInput.files[0]) uploadReference(fileInput.files[0]);
+    });
+
+    drop.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        drop.classList.add('dragover');
+    });
+    drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+    drop.addEventListener('drop', (e) => {
+        e.preventDefault();
+        drop.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file) uploadReference(file);
+    });
+
+    // Paste an image anywhere on the page to use it as the reference
+    document.addEventListener('paste', (e) => {
+        const item = Array.from(e.clipboardData?.items || []).find(i => i.type.startsWith('image/'));
+        if (item) {
+            e.preventDefault();
+            uploadReference(item.getAsFile());
+        }
+    });
+
+    document.getElementById('referencePreview')?.addEventListener('error', () => {
+        if (referenceImage) clearReference();
+    });
+
+    modelField?.addEventListener('change', updateModelOptions);
+    updateModelOptions();
+}
+
+// ============ Form persistence ============
+
+// The Create form survives navigating to other pages (and reloads)
+const FORM_STATE_KEY = 'createFormState';
+const FORM_STATE_FIELDS = ['prompt', 'model', 'varyMode', 'width', 'height', 'steps', 'seed', 'count'];
+let restoringFormState = false;
+
+function saveFormState() {
+    // While restoring, the form is half-filled; don't overwrite the saved state with it
+    if (restoringFormState || !document.getElementById('generateForm')) return;
+    const state = { reference: referenceImage };
+    for (const id of FORM_STATE_FIELDS) {
+        const field = document.getElementById(id);
+        if (field) state[id] = field.value;
+    }
+    try {
+        localStorage.setItem(FORM_STATE_KEY, JSON.stringify(state));
+    } catch (e) {
+        console.error('Failed to save form state:', e);
+    }
+}
+
+function restoreFormState() {
+    const form = document.getElementById('generateForm');
+    if (!form) return;
+
+    let state = null;
+    try {
+        state = JSON.parse(localStorage.getItem(FORM_STATE_KEY));
+    } catch (e) {
+        console.error('Failed to load form state:', e);
+    }
+
+    if (state) {
+        restoringFormState = true;
+        // The reference decides which models are selectable, so set it before the model
+        if (state.reference) setReference(state.reference);
+        for (const id of FORM_STATE_FIELDS) {
+            const field = document.getElementById(id);
+            if (field && state[id] !== undefined) field.value = state[id];
+        }
+        updateModelOptions();
+        restoringFormState = false;
+    }
+
+    form.addEventListener('input', saveFormState);
+    form.addEventListener('change', saveFormState);
 }
 
 // Refresh queue display (debounced to prevent flashing)
@@ -318,6 +571,9 @@ function displayImageInViewer(imgElement) {
     const model = imgElement.dataset.model || '';
     const width = imgElement.dataset.width || '';
     const height = imgElement.dataset.height || '';
+    const reference = imgElement.dataset.reference || '';
+    const seed = imgElement.dataset.seed || '';
+    const steps = imgElement.dataset.steps || '';
 
     // Store current image metadata for reuse buttons
     currentImageMetadata = {
@@ -325,7 +581,10 @@ function displayImageInViewer(imgElement) {
         originalPrompt: originalPrompt,
         model: model,
         width: width,
-        height: height
+        height: height,
+        reference: reference,
+        seed: seed,
+        steps: steps
     };
 
     // Update current gallery index to match this image
@@ -370,6 +629,22 @@ function displayImageInViewer(imgElement) {
                 <div class="prompt-text">${escapeHtml(prompt)}</div>
             </div>
         `;
+    }
+
+    if (reference) {
+        infoHtml = `
+            <div class="prompt-section viewer-reference">
+                <img src="/uploads/${escapeHtml(reference)}" alt="Reference image" title="Reference image (click to enlarge)"
+                     onclick="openModal(this.src, '', null)">
+                <div class="prompt-label">Edited from reference</div>
+            </div>
+        ` + infoHtml;
+    }
+
+    const details = [model, width && height ? `${width}×${height}` : '', steps ? `${steps} steps` : '', seed !== '' ? `seed ${seed}` : '']
+        .filter(Boolean).join(' · ');
+    if (details) {
+        infoHtml += `<div class="image-details">${escapeHtml(details)}</div>`;
     }
 
     imageViewer.innerHTML = `<img src="${imageSrc}" alt="${escapeHtml(prompt)}" style="cursor: zoom-in;" onclick="openModal('${imageSrc}', \`${prompt}\`, \`${originalPrompt}\`)">`;
@@ -587,6 +862,12 @@ document.addEventListener('keydown', function(event) {
     } else if (event.key === 'ArrowRight') {
         event.preventDefault();
         navigateNextGalleryImage();
+    }
+
+    // Edit current image (use it as the reference)
+    else if (event.key === 'e' || event.key === 'E') {
+        event.preventDefault();
+        useCurrentAsReference();
     }
 
     // Delete current image
@@ -894,59 +1175,39 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Restore reused parameters from sessionStorage if present
+    initReferenceInput();
+    restoreFormState();
+
+    // Restore reused parameters (these override the saved form) from sessionStorage if present
     const reuseAllData = sessionStorage.getItem('reuseAll');
     const reusePromptData = sessionStorage.getItem('reusePrompt');
+    const reuseReferenceData = sessionStorage.getItem('reuseReference');
 
     if (reuseAllData) {
         try {
-            const data = JSON.parse(reuseAllData);
-            const promptField = document.getElementById('prompt');
-            const modelField = document.getElementById('model');
-            const widthField = document.getElementById('width');
-            const heightField = document.getElementById('height');
-            const varyModeField = document.getElementById('varyMode');
-
-            if (promptField && data.prompt) {
-                promptField.value = data.prompt;
-            }
-
-            if (modelField && data.model) {
-                modelField.value = data.model;
-            }
-
-            if (widthField) {
-                widthField.value = data.width || '';
-            }
-
-            if (heightField) {
-                heightField.value = data.height || '';
-            }
-
-            // Reset vary mode to None since we're reusing an already-generated image
-            if (varyModeField) {
-                varyModeField.value = '';
-            }
-
-            // Focus the prompt field and scroll to it
-            if (promptField) {
-                promptField.focus();
-                promptField.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-
-            // Clear the stored data
-            sessionStorage.removeItem('reuseAll');
+            applyFormParams(JSON.parse(reuseAllData));
         } catch (e) {
             console.error('Failed to restore reuse data:', e);
         }
+        // Clear the stored data
+        sessionStorage.removeItem('reuseAll');
     } else if (reusePromptData) {
         const promptField = document.getElementById('prompt');
         if (promptField) {
             promptField.value = reusePromptData;
+            saveFormState();
             promptField.focus();
             promptField.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
         // Clear the stored data
         sessionStorage.removeItem('reusePrompt');
+    } else if (reuseReferenceData) {
+        try {
+            setReference(JSON.parse(reuseReferenceData));
+            document.getElementById('prompt')?.focus();
+        } catch (e) {
+            console.error('Failed to restore reference:', e);
+        }
+        sessionStorage.removeItem('reuseReference');
     }
 });

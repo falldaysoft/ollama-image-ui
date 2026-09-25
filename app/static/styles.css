@@ -172,9 +172,17 @@ nav {
     margin-bottom: 1rem;
 }
 
+.generate-form-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
 .generate-form h2 {
     font-size: 1.2rem;
-    margin-bottom: 1rem;
+    margin-bottom: 0;
 }
 
 .generate-form textarea {
@@ -188,7 +196,10 @@ nav {
 }
 
 .generate-form button[type="submit"] {
-    width: 100%;
+    width: auto;
+    margin-bottom: 0;
+    padding: 0.5rem 1.25rem;
+    white-space: nowrap;
 }
 
 
@@ -774,4 +785,132 @@ nav {
     .keyboard-hint {
         display: none;
     }
+}
+
+/* Reference image (edits) */
+.reference-field {
+    margin-bottom: var(--pico-spacing);
+}
+
+.reference-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 0.25rem;
+}
+
+.reference-label small {
+    color: var(--pico-muted-color);
+    font-size: 0.75rem;
+}
+
+.reference-drop {
+    /* Undo Pico's [role=button] styling */
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    width: 100%;
+    font-weight: normal;
+    box-shadow: none;
+    border: 2px dashed var(--pico-muted-border-color);
+    border-radius: var(--pico-border-radius);
+    min-height: 5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.reference-drop:hover,
+.reference-drop:focus-visible,
+.reference-drop.dragover {
+    border-color: var(--pico-primary);
+    background: var(--pico-primary-focus);
+    outline: none;
+}
+
+.reference-drop[aria-busy="true"] {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.reference-empty {
+    color: var(--pico-muted-color);
+    font-size: 0.875rem;
+    padding: 1rem;
+    text-align: center;
+}
+
+.reference-choose {
+    color: var(--pico-primary);
+    text-decoration: underline;
+}
+
+.reference-preview {
+    position: relative;
+    padding: 0.5rem;
+}
+
+.reference-preview img {
+    display: block;
+    max-width: 100%;
+    max-height: 180px;
+    border-radius: 4px;
+}
+
+.reference-remove {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border-radius: 50%;
+    line-height: 1;
+    font-size: 1.1rem;
+    background: var(--pico-del-color);
+    border: none;
+    color: white;
+}
+
+.edit-hint {
+    display: block;
+    margin-top: 0.4rem;
+    color: var(--pico-muted-color);
+    font-size: 0.75rem;
+    line-height: 1.35;
+}
+
+.generate-form select option:disabled {
+    color: var(--pico-muted-color);
+}
+
+.queue-reference {
+    width: 2rem;
+    height: 2rem;
+    object-fit: cover;
+    border-radius: 3px;
+    margin-right: 0.5rem;
+    flex-shrink: 0;
+}
+
+.image-viewer-info .viewer-reference {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.image-viewer-info .viewer-reference img {
+    width: 3.5rem;
+    height: 3.5rem;
+    object-fit: cover;
+    border-radius: 4px;
+    cursor: zoom-in;
+}
+
+.image-viewer-info .image-details {
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--pico-muted-color);
 }

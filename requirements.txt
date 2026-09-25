@@ -7,3 +7,5 @@ jinja2
 transformers
 torch
 accelerate
+pillow
+numpy

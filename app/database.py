@@ -67,6 +67,13 @@ async def init_db():
             await db.execute("ALTER TABLE jobs ADD COLUMN height INTEGER")
         except Exception:
             pass  # Column already exists
+        # Migration: reference image (edits), seed and steps on jobs and images
+        for table in ("jobs", "images"):
+            for column, col_type in (("reference_image", "TEXT"), ("seed", "INTEGER"), ("steps", "INTEGER")):
+                try:
+                    await db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+                except Exception:
+                    pass  # Column already exists
         await db.commit()
 
 
@@ -76,12 +83,12 @@ async def get_db():
 
 
 # Image operations
-async def create_image(id: str, filename: str, prompt: str, model: str, original_prompt: Optional[str] = None, width: Optional[int] = None, height: Optional[int] = None) -> dict:
+async def create_image(id: str, filename: str, prompt: str, model: str, original_prompt: Optional[str] = None, width: Optional[int] = None, height: Optional[int] = None, reference_image: Optional[str] = None, seed: Optional[int] = None, steps: Optional[int] = None) -> dict:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         await db.execute(
-            "INSERT INTO images (id, filename, prompt, model, original_prompt, width, height) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (id, filename, prompt, model, original_prompt, width, height)
+            "INSERT INTO images (id, filename, prompt, model, original_prompt, width, height, reference_image, seed, steps) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (id, filename, prompt, model, original_prompt, width, height, reference_image, seed, steps)
         )
         await db.commit()
         cursor = await db.execute("SELECT * FROM images WHERE id = ?", (id,))
@@ -139,13 +146,13 @@ async def delete_image(id: str) -> bool:
 
 
 # Job operations
-async def create_job(id: str, prompt: str, model: str, vary_mode: Optional[str] = None, width: Optional[int] = None, height: Optional[int] = None, varied_prompt: Optional[str] = None) -> dict:
+async def create_job(id: str, prompt: str, model: str, vary_mode: Optional[str] = None, width: Optional[int] = None, height: Optional[int] = None, varied_prompt: Optional[str] = None, reference_image: Optional[str] = None, seed: Optional[int] = None, steps: Optional[int] = None) -> dict:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         now = datetime.utcnow().isoformat()
         await db.execute(
-            "INSERT INTO jobs (id, prompt, model, status, created_at, vary_mode, width, height, varied_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (id, prompt, model, "pending", now, vary_mode, width, height, varied_prompt)
+            "INSERT INTO jobs (id, prompt, model, status, created_at, vary_mode, width, height, varied_prompt, reference_image, seed, steps) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (id, prompt, model, "pending", now, vary_mode, width, height, varied_prompt, reference_image, seed, steps)
         )
         await db.commit()
         cursor = await db.execute("SELECT * FROM jobs WHERE id = ?", (id,))

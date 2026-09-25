@@ -8,6 +8,9 @@
              data-model="{{ image.model | e }}"
              data-width="{{ image.width if image.width else '' }}"
              data-height="{{ image.height if image.height else '' }}"
+             data-reference="{{ image.reference_image or '' }}"
+             data-seed="{{ image.seed if image.seed is not none else '' }}"
+             data-steps="{{ image.steps or '' }}"
              onclick="openModalFromElement(this)"
              loading="lazy">
     </div>

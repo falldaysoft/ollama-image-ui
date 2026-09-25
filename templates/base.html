@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Ollama Image Generator{% endblock %}</title>
+    <title>{% block title %}Image Generator{% endblock %}</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
     <link rel="stylesheet" href="/static/styles.css">
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
@@ -14,9 +14,9 @@
         <nav class="container">
             <div class="top-bar-content">
                 <div class="top-bar-left">
-                    <div class="top-bar-title">Ollama Image Generator</div>
+                    <div class="top-bar-title">Image Generator</div>
                     <ul class="top-bar-nav">
-                        <li><a href="/" {% if request.url.path == '/' %}aria-current="page"{% endif %}>Generate</a></li>
+                        <li><a href="/" {% if request.url.path == '/' %}aria-current="page"{% endif %}>Create</a></li>
                         <li><a href="/queue" {% if request.url.path == '/queue' %}aria-current="page"{% endif %}>Queue</a></li>
                     </ul>
                 </div>
@@ -30,7 +30,7 @@
                         <span class="queue-badge processing" id="processingCount">0</span>
                     </div>
                     <div class="keyboard-hint">
-                        <kbd>1</kbd> Generate · <kbd>2</kbd> Queue · <kbd>←</kbd><kbd>→</kbd> Navigate · <kbd>Del</kbd> Delete
+                        <kbd>1</kbd> Create · <kbd>2</kbd> Queue · <kbd>←</kbd><kbd>→</kbd> Navigate · <kbd>E</kbd> Edit · <kbd>Del</kbd> Delete
                     </div>
                 </div>
             </div>
@@ -48,6 +48,7 @@
                     <div class="image-viewer-header">
                         <h3>Image Viewer</h3>
                         <div class="image-viewer-actions">
+                            <button class="secondary outline" onclick="useCurrentAsReference()" title="Use this image as the reference for an edit (E key)">Edit</button>
                             <button class="secondary outline" onclick="reusePrompt()" title="Copy prompt to generation form">Reuse Prompt</button>
                             <button class="secondary outline" onclick="reuseAll()" title="Copy all parameters to generation form">Reuse All</button>
                             <button class="secondary outline" style="color: var(--pico-del-color);" onclick="deleteCurrentImage()" title="Delete this image (Del key)">Delete</button>

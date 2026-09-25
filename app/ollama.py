@@ -18,6 +18,10 @@ class GenerationResult:
     image_id: Optional[str] = None
     filename: Optional[str] = None
     error: Optional[str] = None
+    # Actual output size and seed, when the backend reports them
+    width: Optional[int] = None
+    height: Optional[int] = None
+    seed: Optional[int] = None
 
 
 @dataclass

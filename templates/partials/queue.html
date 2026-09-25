@@ -5,6 +5,9 @@
     {% for job in queue.jobs %}
     <div class="queue-item" id="job-{{ job.id }}">
         <div class="queue-item-header">
+            {% if job.reference_image %}
+            <img class="queue-reference" src="/uploads/{{ job.reference_image }}" alt="Reference image" title="Editing this image">
+            {% endif %}
             <span class="prompt" title="{{ job.prompt }}">{{ job.prompt }}</span>
             {% if job.vary_mode %}
             <span class="vary-badge" title="Prompt will be varied">{{ {'expand': 'expand', 'expand_concise': 'sentence', 'expand_keywords': 'keywords'}.get(job.vary_mode, 'vary') }}</span>

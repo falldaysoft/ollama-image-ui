@@ -2,18 +2,42 @@
 
 {% block left_panel %}
 <section class="generate-form">
-    <h2>Generate Image</h2>
     <form id="generateForm" onsubmit="submitGeneration(event)">
+        <div class="generate-form-header">
+            <h2>Create or Edit</h2>
+            <button type="submit" id="generateBtn">Generate</button>
+        </div>
         <label for="prompt">
             Prompt
             <textarea id="prompt" name="prompt" placeholder="Describe the image you want to generate..." required></textarea>
         </label>
+        <div class="reference-field">
+            <div class="reference-label">
+                <span>Reference Image</span>
+                <small>Optional: attach one to edit it</small>
+            </div>
+            <div id="referenceDrop" class="reference-drop" tabindex="0" role="button"
+                 aria-label="Reference image: drop, paste, or choose a file">
+                <input type="file" id="referenceFile" accept="image/*" hidden>
+                <div class="reference-empty" id="referenceEmpty">
+                    Drop, paste, or <span class="reference-choose">choose</span> an image
+                </div>
+                <div class="reference-preview" id="referencePreviewWrap" hidden>
+                    <img id="referencePreview" alt="Reference image">
+                    <button type="button" class="reference-remove" onclick="clearReference(event)"
+                            title="Remove reference image" aria-label="Remove reference image">&times;</button>
+                </div>
+            </div>
+            <small class="edit-hint" id="editHint" hidden>
+                Say what to change and what to keep, e.g. "Replace the entire scene with a beach at sunset. Remove the counter. Keep her face and hair unchanged."
+            </small>
+        </div>
         <label for="model">
             Model
             <select id="model" name="model">
                 <option value="__all__">All Models</option>
                 {% for model in models %}
-                <option value="{{ model.id }}">{{ model.name }}</option>
+                <option value="{{ model.id }}" data-backend="{{ model.backend }}" {% if model.id == default_model %}selected{% endif %}>{{ model.name }}</option>
                 {% endfor %}
             </select>
         </label>
@@ -29,18 +53,31 @@
         <div style="display: flex; gap: 1rem;">
             <label for="width" style="flex: 1;">
                 Width
-                <input type="number" id="width" name="width" placeholder="Auto" min="64" max="4096" step="64">
+                <input type="number" id="width" name="width" placeholder="Auto" min="64" max="4096" step="16">
             </label>
             <label for="height" style="flex: 1;">
                 Height
-                <input type="number" id="height" name="height" placeholder="Auto" min="64" max="4096" step="64">
+                <input type="number" id="height" name="height" placeholder="Auto" min="64" max="4096" step="16">
+            </label>
+        </div>
+        <div class="qwen-options" id="qwenOptions" style="display: flex; gap: 1rem;">
+            <label for="steps" style="flex: 1;">
+                Steps
+                <select id="steps" name="steps">
+                    {% for n in steps_range %}
+                    <option value="{{ n }}">{{ n }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label for="seed" style="flex: 1;">
+                Seed
+                <input type="number" id="seed" name="seed" placeholder="Random" min="0">
             </label>
         </div>
         <label for="count">
             Count
             <input type="number" id="count" name="count" value="1" min="1" max="100">
         </label>
-        <button type="submit" id="generateBtn">Generate</button>
     </form>
 </section>
 {% endblock %}
